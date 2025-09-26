@@ -1,0 +1,16 @@
+{
+    "Changes": [
+        {
+            "Action": "UPSERT",
+            "ResourceRecordSet": {
+                "Name": "api.proovid.de",
+                "Type": "A",
+                "AliasTarget": {
+                    "DNSName": "ui-proov-alb-1535367426.eu-central-1.elb.amazonaws.com",
+                    "EvaluateTargetHealth": false,
+                    "HostedZoneId": "Z215JYRZR1TBD5"
+                }
+            }
+        }
+    ]
+}

@@ -1,0 +1,113 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: eu-central-1
+  ECR_REGISTRY: 851725596604.dkr.ecr.eu-central-1.amazonaws.com
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and push backend image
+      working-directory: ./backend
+      run: |
+        docker build -t backend .
+        docker tag backend:latest $ECR_REGISTRY/backend:latest
+        docker push $ECR_REGISTRY/backend:latest
+
+    - name: Update backend service
+      run: |
+        aws ecs update-service \
+          --cluster my-cluster \
+          --service backend-service \
+          --force-new-deployment \
+          --region $AWS_REGION
+
+  deploy-worker:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and push worker image
+      working-directory: ./backend
+      run: |
+        docker build -f worker/Dockerfile -t worker .
+        docker tag worker:latest $ECR_REGISTRY/worker:latest
+        docker push $ECR_REGISTRY/worker:latest
+
+    - name: Update worker service
+      run: |
+        aws ecs update-service \
+          --cluster my-cluster \
+          --service worker-service \
+          --force-new-deployment \
+          --region $AWS_REGION
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: './frontend/package-lock.json'
+
+    - name: Install dependencies
+      working-directory: ./frontend
+      run: npm ci
+
+    - name: Build frontend
+      working-directory: ./frontend
+      run: npm run build
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Deploy to S3
+      working-directory: ./frontend
+      run: |
+        aws s3 sync dist/ s3://your-frontend-bucket-name --delete
+
+    - name: Invalidate CloudFront
+      run: |
+        aws cloudfront create-invalidation \
+          --distribution-id YOUR_CLOUDFRONT_DISTRIBUTION_ID \
+          --paths "/*"

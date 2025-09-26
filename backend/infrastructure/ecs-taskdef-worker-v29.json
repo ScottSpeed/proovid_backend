@@ -1,0 +1,41 @@
+{
+  "family": "worker-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::851725596604:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::851725596604:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "worker",
+      "image": "851725596604.dkr.ecr.eu-central-1.amazonaws.com/worker:v29",
+      "essential": true,
+      "environment": [
+        {
+          "name": "AWS_DEFAULT_REGION",
+          "value": "eu-central-1"
+        },
+        {
+          "name": "JOB_TABLE",
+          "value": "proov_jobs"
+        }
+        ,
+        {
+          "name": "SQS_QUEUE_URL",
+          "value": "https://sqs.eu-central-1.amazonaws.com/851725596604/proov-worker-queue"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/worker",
+          "awslogs-region": "eu-central-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

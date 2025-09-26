@@ -1,0 +1,179 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Create an Internet-facing Application Load Balancer (ALB), target group and
+  listener. Optionally request an ACM certificate (DNS validation via Route53)
+  and create an ECS Service attached to the target group when ClusterName and
+  TaskDefinitionArn are provided.
+
+Parameters:
+  VpcId:
+    Type: String
+    Description: VPC to place ALB into
+
+  PublicSubnets:
+    Type: List<String>
+    Description: Comma-separated list of public subnet IDs (at least two)
+
+  ALBSecurityGroupName:
+    Type: String
+    Default: prod-alb-sg
+
+  ExistingALBSecurityGroupId:
+    Type: String
+    Default: ''
+    Description: If set, use this existing Security Group ID for the ALB instead of creating a new one
+
+  FrontendContainerPort:
+    Type: Number
+    Default: 80
+    Description: Port the frontend container listens on inside the task
+
+  DomainName:
+    Type: String
+    Default: ''
+    Description: Optional fully-qualified domain name for the UI (e.g. ui.proov.com). If provided and HostedZoneId is set, an ACM cert will be requested and HTTPS listener created.
+
+  HostedZoneId:
+    Type: String
+    Default: ''
+    Description: Route53 Hosted Zone ID (without /hostedzone/ prefix). Required to perform DNS validation automatically.
+
+  ClusterName:
+    Type: String
+    Default: ''
+    Description: Optional ECS cluster name to create a Service for the frontend (leave empty to manage service manually)
+
+  ServiceName:
+    Type: String
+    Default: ''
+    Description: ECS Service name to create when ClusterName is specified
+
+  TaskDefinitionArn:
+    Type: String
+    Default: ''
+    Description: ARN of the Task Definition to use for the ECS Service (optional)
+
+  TaskSecurityGroup:
+    Type: String
+    Default: ''
+    Description: Security Group ID to attach to the ECS tasks (required if creating service)
+
+  DesiredCount:
+    Type: Number
+    Default: 2
+
+Conditions:
+  HasDomainName: !Not [ !Equals [ !Ref DomainName, "" ] ]
+  HasHostedZone: !Not [ !Equals [ !Ref HostedZoneId, "" ] ]
+  CreateCertificate: !And [ !Condition HasDomainName, !Condition HasHostedZone ]
+  CreateECSService: !And
+    - !Not [ !Equals [ !Ref ClusterName, "" ] ]
+    - !Not [ !Equals [ !Ref TaskDefinitionArn, "" ] ]
+    - !Not [ !Equals [ !Ref ServiceName, "" ] ]
+    - !Not [ !Equals [ !Ref TaskSecurityGroup, "" ] ]
+  UseExistingALBSG: !Not [ !Equals [ !Ref ExistingALBSecurityGroupId, "" ] ]
+  CreateALBSG: !Not [ !Condition UseExistingALBSG ]
+
+Resources:
+  ALBSecurityGroup:
+    Condition: CreateALBSG
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Ref ALBSecurityGroupName
+      GroupDescription: Security group for public ALB
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: ui-proov-alb
+      Subnets: !Ref PublicSubnets
+      SecurityGroups: !If [ UseExistingALBSG, [ !Ref ExistingALBSecurityGroupId ], [ !Ref ALBSecurityGroup ] ]
+      Scheme: internet-facing
+      Type: application
+
+  FrontendTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: frontend-tg
+      Port: !Ref FrontendContainerPort
+      Protocol: HTTP
+      VpcId: !Ref VpcId
+      TargetType: ip
+      HealthCheckPath: /
+
+  HTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref FrontendTargetGroup
+
+  # Optional ACM Certificate (DNS validation via Route53) and HTTPS listener
+  Certificate:
+    Condition: CreateCertificate
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !If [ HasHostedZone, !Ref HostedZoneId, !Ref "AWS::NoValue" ]
+
+  HTTPSListener:
+    Condition: CreateCertificate
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref Certificate
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref FrontendTargetGroup
+
+  # Optional ECS Service attached to the target group
+  FrontendECSService:
+    Condition: CreateECSService
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Ref ServiceName
+      Cluster: !Ref ClusterName
+      DesiredCount: !Ref DesiredCount
+      LaunchType: FARGATE
+      TaskDefinition: !Ref TaskDefinitionArn
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: !Ref PublicSubnets
+          SecurityGroups: [!Ref TaskSecurityGroup]
+          AssignPublicIp: DISABLED
+      LoadBalancers:
+        - TargetGroupArn: !Ref FrontendTargetGroup
+          ContainerName: frontend
+          ContainerPort: !Ref FrontendContainerPort
+
+Outputs:
+  ALBDNSName:
+    Description: The DNS name of the ALB
+    Value: !GetAtt [ApplicationLoadBalancer, DNSName]
+
+  ALBHostedZoneId:
+    Description: The hosted zone id for the ALB (for Route53 alias)
+    Value: !GetAtt [ApplicationLoadBalancer, CanonicalHostedZoneID]
+
+  TargetGroupArn:
+    Description: Target group ARN
+    Value: !Ref FrontendTargetGroup

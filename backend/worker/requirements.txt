@@ -1,0 +1,7 @@
+strands-agents>=1.0.0
+strands-agents-tools>=0.2.0
+boto3
+opencv-python-headless
+numpy
+opensearch-py
+requests-aws4auth

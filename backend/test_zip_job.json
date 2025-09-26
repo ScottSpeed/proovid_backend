@@ -1,0 +1,9 @@
+{
+  "videos": [
+    {
+      "bucket": "christian-aws-development",
+      "key": "test.zip",
+      "tool": "unzip_files"
+    }
+  ]
+}

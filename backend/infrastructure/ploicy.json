@@ -1,0 +1,18 @@
+[
+  {
+    "Rules": [
+      {
+        "ResourceType": "index",
+        "Resource": [
+          "index/video-vector-collection/*"
+        ],
+        "Permission": [
+          "aoss:*"
+        ]
+      }
+    ],
+    "Principal": [
+      "arn:aws:iam::851725596604:user/admin"
+    ]
+  }
+]

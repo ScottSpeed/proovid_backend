@@ -1,0 +1,16 @@
+strands-agents>=1.0.0
+strands-agents-tools>=0.2.0
+numpy>=1.21.0
+opencv-python>=4.5.1
+boto3>=1.17.0
+fastapi>=0.68.0
+uvicorn[standard]>=0.15.0
+opencv-python-headless>=4.5.1
+docker>=5.0.0
+opensearch-py>=2.0.0
+requests-aws4auth>=1.0.0
+PyJWT[crypto]>=2.8.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.6
+cryptography>=3.4.8
+requests>=2.28.0

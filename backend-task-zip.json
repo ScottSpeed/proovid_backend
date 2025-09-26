@@ -1,0 +1,44 @@
+{
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "851725596604.dkr.ecr.eu-central-1.amazonaws.com/proov-backend:zip-unpacker",
+      "cpu": 0,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "hostPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "environment": [
+        {
+          "name": "AWS_DEFAULT_REGION",
+          "value": "eu-central-1"
+        }
+      ],
+      "mountPoints": [],
+      "volumesFrom": [],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/backend",
+          "awslogs-region": "eu-central-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "systemControls": []
+    }
+  ],
+  "family": "backend-task",
+  "taskRoleArn": "arn:aws:iam::851725596604:role/ecsTaskRole",
+  "executionRoleArn": "arn:aws:iam::851725596604:role/ecsTaskExecutionRole",
+  "networkMode": "awsvpc",
+  "volumes": [],
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "512",
+  "memory": "4096"
+}

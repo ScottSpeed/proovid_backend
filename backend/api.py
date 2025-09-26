@@ -1,0 +1,1139 @@
+from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Query, Depends
+from fastapi.responses import Response
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Dict, Any
+import logging
+import os
+import uuid
+import json
+import docker
+import boto3
+import traceback
+import time
+
+from botocore.exceptions import ClientError
+import pathlib
+
+# Import auth bypass for debugging
+from auth_bypass import (
+    get_current_user, require_admin, require_user
+)
+from auth_cognito import (
+    LoginRequest, LoginResponse, UserResponse, ChangePasswordRequest
+)
+
+# Basic logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+# increase opensearch/urllib3 logs for debugging if needed
+logging.getLogger("opensearch").setLevel(logging.INFO)
+logging.getLogger("urllib3").setLevel(logging.INFO)
+
+app = FastAPI(title="Proov API", description="Enterprise Video Analysis API with JWT Authentication")
+
+# Initialize authentication system on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize authentication system"""
+    logger.info("🛡️  Initializing Cognito authentication system...")
+    logger.info("✅ Cognito authentication system ready!")
+
+# --- Authentication Endpoints ---
+
+@app.get("/auth/me", response_model=UserResponse)
+async def get_current_user_info(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Get current user information"""
+    return UserResponse(
+        username=current_user["username"],
+        email=current_user.get("email", ""),
+        role=current_user.get("role", "user"),
+        is_active=current_user.get("is_active", True),
+        created_at=current_user.get("created_at", "")
+    )
+    
+    return {"message": "Password updated successfully"}
+
+
+# --- Configuration loader ---
+def load_config() -> dict:
+    """Load configuration from a JSON file. File path can be overridden with CONFIG_FILE env var.
+
+    Fallback order:
+    1. Path from CONFIG_FILE env var
+    2. /etc/proov/config.json
+    3. <repo>/backend/config.json (next to this file)
+    4. empty dict
+    """
+    candidates = []
+    env_path = os.environ.get("CONFIG_FILE")
+    if env_path:
+        candidates.append(env_path)
+    candidates.append("/etc/proov/config.json")
+    # config next to this module
+    module_dir = pathlib.Path(__file__).resolve().parent
+    candidates.append(str(module_dir / "config.json"))
+
+    for p in candidates:
+        try:
+            if not p:
+                continue
+            fp = pathlib.Path(p)
+            if not fp.exists():
+                continue
+            with fp.open("r", encoding="utf-8") as fh:
+                data = json.load(fh)
+                logger.info("Loaded config from %s", str(fp))
+                return data if isinstance(data, dict) else {}
+        except Exception:
+            logger.exception("Failed to load config file %s", p)
+            continue
+    logger.info("No config file found; falling back to environment variables")
+    return {}
+
+
+# load config at import time
+_CONFIG = load_config()
+
+
+def cfg(key: str, default=None):
+    """Helper: read key from JSON config first, then from environment, then default."""
+    if key in _CONFIG:
+        return _CONFIG.get(key)
+    return os.environ.get(key, default)
+
+
+# --- DynamoDB job table helper ---
+import botocore
+from botocore.config import Config
+
+# Configure boto3 to use container credentials
+boto3_config = Config(
+    region_name=os.environ.get("AWS_DEFAULT_REGION", "eu-central-1")
+)
+
+def get_dynamodb_resource():
+    region = cfg("AWS_DEFAULT_REGION", "eu-central-1")
+    
+    # Use default AWS SDK behavior - it will automatically use VPC endpoints if configured
+    return boto3.resource("dynamodb", region_name=region, config=boto3_config)
+
+
+def get_s3_client():
+    region = cfg("AWS_DEFAULT_REGION", "eu-central-1")
+    
+    # Check if running in ECS with a VPC endpoint
+    if 'ECS_CONTAINER_METADATA_URI_V4' in os.environ:
+        try:
+            # Try to use VPC endpoint if available, but fallback to default
+            return boto3.client("s3", region_name=region, config=boto3_config)
+        except Exception as e:
+            logger.warning(f"Failed to create S3 client with VPC endpoint: {e}")
+
+    return boto3.client("s3", region_name=region, config=boto3_config)
+
+
+def ensure_job_table(table_name: str):
+    """Create the DynamoDB table if it doesn't exist (on-demand billing)."""
+    ddb = get_dynamodb_resource()
+    try:
+        table = ddb.Table(table_name)
+        table.load()
+        logger.info("DynamoDB table '%s' exists", table_name)
+        return table
+    except botocore.exceptions.ClientError as e:
+        code = e.response.get("Error", {}).get("Code")
+        if code in ("ResourceNotFoundException", "ValidationException", "ResourceNotFound"):
+            logger.info("Creating DynamoDB table %s", table_name)
+            table = ddb.create_table(
+                TableName=table_name,
+                KeySchema=[{"AttributeName": "job_id", "KeyType": "HASH"}],
+                AttributeDefinitions=[{"AttributeName": "job_id", "AttributeType": "S"}],
+                BillingMode="PAY_PER_REQUEST",
+            )
+            # wait until created
+            table.wait_until_exists()
+            logger.info("DynamoDB table '%s' created", table_name)
+            return table
+        else:
+            logger.exception("Error checking/creating DynamoDB table %s", table_name)
+            raise
+
+
+JOB_TABLE = cfg("JOB_TABLE", "proov_jobs")
+_JOB_TABLE_OBJ = None
+
+
+def job_table():
+    global _JOB_TABLE_OBJ
+    if _JOB_TABLE_OBJ is None:
+        _JOB_TABLE_OBJ = ensure_job_table(JOB_TABLE)
+    return _JOB_TABLE_OBJ
+
+
+def save_job_entry(job_id: str, status: str, result=None, video=None, created_at=None):
+    t = job_table()
+    current_time = int(time.time())  # Convert to integer
+    
+    item = {
+        "job_id": job_id, 
+        "status": status,
+        "created_at": int(created_at) if created_at else current_time,  # Unix timestamp as integer
+        "updated_at": current_time  # Also use integer timestamp here
+    }
+    
+    if result is not None:
+        # store small results; large blobs should go to S3
+        item["result"] = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+    if video is not None:
+        # Store video as JSON for backward compatibility
+        item["video"] = video if isinstance(video, dict) else json.dumps(video, ensure_ascii=False)
+        
+        # Extract S3 bucket and key as separate fields for worker access
+        video_dict = video if isinstance(video, dict) else video
+        if hasattr(video_dict, 'bucket') and hasattr(video_dict, 'key'):
+            item["s3_bucket"] = video_dict.bucket
+            item["s3_key"] = video_dict.key
+            item["file_url"] = f"s3://{video_dict.bucket}/{video_dict.key}"
+        elif isinstance(video_dict, dict):
+            if 'bucket' in video_dict and 'key' in video_dict:
+                item["s3_bucket"] = video_dict['bucket']
+                item["s3_key"] = video_dict['key']
+                item["file_url"] = f"s3://{video_dict['bucket']}/{video_dict['key']}"
+            elif 'bucket' in video_dict:
+                item["s3_bucket"] = video_dict['bucket']
+            elif 'key' in video_dict:
+                item["s3_key"] = video_dict['key']
+    
+    t.put_item(Item=item)
+
+
+# CORS
+# --- CORS robust: unterstützt mehrere Domains, CloudFront und eigene Subdomain ---
+import re
+
+frontend_origins = os.environ.get(
+    "FRONTEND_ORIGINS",
+    "https://ui.proovid.de,https://localhost:5173,https://127.0.0.1:5173"
+)
+origins_raw = frontend_origins.strip()
+if origins_raw == "*":
+    allow_origins = ["*"]
+else:
+    # Splitte an Komma oder Leerzeichen (oder beidem)
+    allow_origins = [o.strip() for o in re.split(r"[ ,]+", origins_raw) if o.strip()]
+    if not allow_origins:
+        allow_origins = [
+            "https://ui.proovid.de",
+            "https://localhost:5173",
+            "https://127.0.0.1:5173"
+        ]
+logger.info(f"CORS allow_origins: {allow_origins}")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allow_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# --- Helper: OpenSearch client ---
+# OpenSearch client removed: we use DynamoDB for job storage now
+
+
+# --- Agent import (existing project) ---
+from worker.agent import agent  # noqa: E402
+
+
+# --- Models ---
+class AgentRequest(BaseModel):
+    message: str
+
+
+class VideoJob(BaseModel):
+    bucket: str
+    key: str
+    tool: str
+
+
+class AnalyzeRequest(BaseModel):
+    videos: List[VideoJob]
+
+
+class AnalyzeResponseJob(BaseModel):
+    job_id: str
+    video: VideoJob
+
+
+class AnalyzeResponse(BaseModel):
+    jobs: List[AnalyzeResponseJob]
+
+
+class JobStatusRequest(BaseModel):
+    job_ids: List[str]
+
+
+class JobStatusItem(BaseModel):
+    job_id: str
+    status: str
+    result: str = None
+
+
+class JobStatusResponse(BaseModel):
+    statuses: List[JobStatusItem]
+
+@app.get("/")
+async def root():
+    return {"status": "ok"}
+
+# --- Health ---
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
+# CORS preflight for /ask
+@app.options("/ask")
+async def options_ask(request: Request):
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+            "Access-Control-Allow-Methods": "POST,OPTIONS",
+            "Access-Control-Allow-Headers": request.headers.get(
+                "access-control-request-headers", "*"
+            ),
+            "Access-Control-Allow-Credentials": "true",
+        },
+    )
+
+
+# --- Ask endpoint (synchronous agent call) ---
+@app.post("/ask")
+async def ask_agent(
+    request: AgentRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    try:
+        response = agent(request.message)
+        # agent may start background jobs and return additional info; keep generic
+        return {"response": str(response)}
+    except Exception as e:
+        logger.exception("agent error")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- S3 listing --- 
+@app.get("/list-videos")
+async def list_videos(
+    prefix: str = Query("", description="S3 prefix"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    bucket = cfg("AWS_S3_BUCKET", "christian-aws-development")
+    s3 = get_s3_client()
+    try:
+        resp = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=100, Delimiter="/")
+        items = []
+        
+        # Add regular files
+        for o in resp.get("Contents", []):
+            items.append({"bucket": bucket, "key": o["Key"], "size": o["Size"]})
+        
+        # Add directories from CommonPrefixes
+        for cp in resp.get("CommonPrefixes", []):
+            items.append({"bucket": bucket, "key": cp["Prefix"], "size": 0, "is_directory": True})
+        
+        return items
+    except ClientError as e:
+        logger.exception("list_videos failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Generate signed URL for video streaming ---
+@app.get("/video-url/{bucket}/{key:path}")
+async def get_video_url(
+    bucket: str,
+    key: str,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Generate a signed URL for video streaming"""
+    s3 = get_s3_client()
+    try:
+        # Generate signed URL valid for 1 hour
+        signed_url = s3.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': bucket, 'Key': key},
+            ExpiresIn=3600  # 1 hour
+        )
+        return {"url": signed_url}
+    except ClientError as e:
+        logger.exception("get_video_url failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Agent launcher (direct execution) ---
+def start_agent_analysis(bucket: str, key: str, job_id: str, tool: str):
+    """
+    Startet eine direkte Agent-Analyse ohne Worker/SQS
+    """
+    try:
+        logger.info("Starting direct agent analysis for job %s with tool %s and file s3://%s/%s", job_id, tool, bucket, key)
+        
+        # Update job status to running
+        table = boto3.resource("dynamodb", region_name=cfg("AWS_DEFAULT_REGION", "eu-central-1"), config=boto3_config).Table(cfg("JOB_TABLE", "proov_jobs"))
+        current_time = int(time.time())
+        table.update_item(
+            Key={"job_id": job_id},
+            UpdateExpression="SET #status = :status, updated_at = :updated_at",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={
+                ":status": "running",
+                ":updated_at": current_time
+            }
+        )
+        
+        # Create agent message based on tool
+        if tool == "detect_blackframes":
+            message = f"Can you find black frames in the video '{key}' from bucket '{bucket}'?"
+        elif tool == "rekognition_detect_text":
+            message = f"What text can you detect in the video '{key}' from bucket '{bucket}'?"
+        elif tool == "analyze_video_complete":
+            message = f"Can you perform a complete video analysis (blackframes and text detection) on video '{key}' from bucket '{bucket}'?"
+        else:
+            message = f"Can you analyze the video '{key}' from bucket '{bucket}' using tool '{tool}'?"
+        
+        # Execute agent analysis
+        logger.info("Executing agent with message: %s", message)
+        response = agent(message)
+        logger.info("Agent response received for job %s", job_id)
+        
+        # Update job with results
+        current_time = int(time.time())
+        table.update_item(
+            Key={"job_id": job_id},
+            UpdateExpression="SET #status = :status, results = :results, updated_at = :updated_at",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={
+                ":status": "completed",
+                ":results": str(response),
+                ":updated_at": current_time
+            }
+        )
+        
+        logger.info("Job %s completed successfully with agent", job_id)
+        
+    except Exception as e:
+        logger.exception("Agent analysis failed for job %s: %s", job_id, str(e))
+        # Update job status to error
+        try:
+            current_time = int(time.time())
+            table.update_item(
+                Key={"job_id": job_id},
+                UpdateExpression="SET #status = :status, error = :error, updated_at = :updated_at",
+                ExpressionAttributeNames={"#status": "status"},
+                ExpressionAttributeValues={
+                    ":status": "error",
+                    ":error": str(e),
+                    ":updated_at": current_time
+                }
+            )
+        except:
+            logger.exception("Failed to update job %s error status", job_id)
+
+# --- Worker launcher (legacy SQS approach) ---
+def start_worker_container(bucket: str, key: str, job_id: str, tool: str):
+    # Enqueue job to SQS for on-demand worker processing
+    # Construct the file_url that the worker expects
+    file_url = f"https://{bucket}.s3.eu-central-1.amazonaws.com/{key}"
+    
+    agent_args = {
+        "file_url": file_url,
+        "bucket": bucket, 
+        "s3_key": key
+    }
+
+    # Default SQS URL - use the hardcoded one we know works
+    sqs_url = "https://sqs.eu-central-1.amazonaws.com/851725596604/proov-worker-queue"
+    
+    # Try config first, then fall back to hardcoded
+    config_sqs_url = cfg("SQS_QUEUE_URL", "")
+    if config_sqs_url:
+        sqs_url = config_sqs_url
+    elif os.environ.get("SQS_QUEUE_URL"):
+        sqs_url = os.environ.get("SQS_QUEUE_URL")
+
+    sqs = boto3.client("sqs", region_name=cfg("AWS_DEFAULT_REGION", "eu-central-1"), config=boto3_config)
+    body = {
+        "job_id": job_id,
+        "tool": tool,
+        "agent_args": agent_args,
+    }
+    logger.info("Enqueuing job %s to SQS %s with tool %s and file_url %s", job_id, sqs_url, tool, file_url)
+    try:
+        sqs.send_message(QueueUrl=sqs_url, MessageBody=json.dumps(body))
+        logger.info("Successfully enqueued job %s to SQS", job_id)
+    except Exception as e:
+        logger.exception("Failed to send SQS message for job %s: %s", job_id, e)
+        raise
+
+
+# --- Analyze endpoint: start workers in background ---
+@app.post("/analyze", response_model=AnalyzeResponse)
+async def analyze_videos(
+    request: AnalyzeRequest, 
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    logger.info("=== ANALYZE REQUEST DEBUG ===")
+    logger.info(f"Request: {request}")
+    logger.info(f"Videos count: {len(request.videos)}")
+    for i, video in enumerate(request.videos):
+        logger.info(f"Video {i}: bucket={video.bucket}, key={video.key}, tool={video.tool}")
+    logger.info("===============================")
+    
+    jobs: List[AnalyzeResponseJob] = []
+    for video in request.videos:
+        job_id = str(uuid.uuid4())
+        logger.info(f"Creating job {job_id} with tool: {video.tool}")
+        # Save job entry to DynamoDB with correct status field
+        save_job_entry(job_id, "queued", video=video.dict())
+        # Use worker with agent integration for scalability
+        background_tasks.add_task(
+            start_worker_container, video.bucket, video.key, job_id, video.tool
+        )
+        jobs.append(AnalyzeResponseJob(job_id=job_id, video=video))
+    return AnalyzeResponse(jobs=jobs)
+
+
+# --- Job status via search (avoid client.get with id, not supported in AOSS) ---
+@app.post("/job-status", response_model=JobStatusResponse)
+def job_status(request: JobStatusRequest):
+    # DynamoDB-backed job status lookup
+    t = job_table()
+    statuses: List[JobStatusItem] = []
+    for job_id in request.job_ids:
+        try:
+            resp = t.get_item(Key={"job_id": job_id})
+            item = resp.get("Item")
+            if not item:
+                statuses.append(JobStatusItem(job_id=job_id, status="not_found", result=""))
+                continue
+            result = item.get("result", "")
+            # Prefer 'status' field, fallback to 'job_status' for legacy jobs
+            status_value = item.get("status") or item.get("job_status", "unknown")
+            statuses.append(JobStatusItem(job_id=job_id, status=status_value, result=str(result)))
+        except Exception:
+            logger.exception("job_status ddb failed for %s", job_id)
+            statuses.append(JobStatusItem(job_id=job_id, status="error", result=""))
+    return JobStatusResponse(statuses=statuses)
+
+
+# --- Jobs endpoints for polling (Option B) ---
+@app.get("/jobs")
+async def list_jobs(current_user: Dict[str, Any] = Depends(get_current_user)):
+    # Scan DynamoDB table for job items (small-scale; for large scale use queries with indexes)
+    t = job_table()
+    try:
+        resp = t.scan(Limit=1000)
+    except Exception as e:
+        logger.exception("list_jobs ddb scan failed")
+        raise HTTPException(status_code=500, detail=f"DynamoDB error: {e}")
+    items = resp.get("Items", [])
+    # normalize items to expected shape
+    out = []
+    for it in items:
+        # Prefer 'status' field, fallback to 'job_status' for legacy jobs
+        status_value = it.get("status") or it.get("job_status")
+        job_entry = {
+            "job_id": it.get("job_id"), 
+            "status": status_value, 
+            "result": it.get("analysis_results") or it.get("result"),
+            "created_at": it.get("created_at"),  # Unix timestamp
+            "updated_at": it.get("updated_at"),  # Unix timestamp 
+            "latest_doc": it
+        }
+        
+        # Add video information directly to job entry for easier frontend access
+        video_data = it.get("video")
+        if video_data:
+            if isinstance(video_data, str):
+                try:
+                    video_parsed = json.loads(video_data)
+                    job_entry["video"] = video_parsed
+                except json.JSONDecodeError:
+                    job_entry["video"] = video_data
+            else:
+                job_entry["video"] = video_data
+        
+        # Also add s3_key if available
+        s3_key = it.get("s3_key")
+        if s3_key:
+            job_entry["s3_key"] = s3_key
+            
+        out.append(job_entry)
+    return out
+
+
+@app.get("/jobs/{job_id}/results")
+async def get_job_results_formatted(
+    job_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Return formatted job results for beautiful frontend display
+    Supports both full and partial job IDs
+    """
+    t = job_table()
+    
+    # If job_id is short (< 20 chars), scan for matching job
+    if len(job_id) < 20:
+        try:
+            resp = t.scan()
+            items = resp.get("Items", [])
+            matching_item = None
+            for item in items:
+                if item.get("job_id", "").startswith(job_id):
+                    matching_item = item
+                    job_id = item.get("job_id")  # Use full job_id
+                    break
+            if not matching_item:
+                raise HTTPException(status_code=404, detail="Job not found")
+            item = matching_item
+        except Exception as e:
+            logger.exception("get_job_results_formatted scan failed for %s", job_id)
+            raise HTTPException(status_code=500, detail=f"DynamoDB error: {e}")
+    else:
+        # Use direct lookup for full job IDs
+        try:
+            resp = t.get_item(Key={"job_id": job_id})
+            item = resp.get("Item")
+            if not item:
+                raise HTTPException(status_code=404, detail="Job not found")
+        except Exception as e:
+            logger.exception("get_job_results_formatted ddb failed for %s", job_id)
+            raise HTTPException(status_code=500, detail=f"DynamoDB error: {e}")
+    
+    status = item.get("status")
+    if status not in ("done", "completed"):
+        raise HTTPException(status_code=400, detail=f"Job not completed yet (status: {status})")
+    
+    # Parse the result - check multiple possible fields
+    result_raw = item.get("analysis_results") or item.get("result", "{}")
+    try:
+        if isinstance(result_raw, str):
+            result = json.loads(result_raw)
+        else:
+            result = result_raw
+    except json.JSONDecodeError:
+        result = {"raw_result": result_raw}
+    
+    # Extract video information from multiple sources
+    video_data = item.get("video", {})
+    if isinstance(video_data, str):
+        try:
+            video_data = json.loads(video_data)
+        except json.JSONDecodeError:
+            video_data = {}
+    
+    # Extract bucket/key from multiple sources
+    file_url = item.get("file_url", "")
+    bucket = item.get("s3_bucket")  # First try direct fields
+    key = item.get("s3_key")
+    tool_name = item.get("tool", "")
+    
+    if file_url:
+        # Parse S3 URL to extract bucket and key
+        if file_url.startswith("s3://"):
+            s3_path = file_url[5:]  # Remove s3://
+            parts = s3_path.split("/", 1)
+            if len(parts) == 2:
+                bucket, key = parts
+        elif "s3" in file_url and ".amazonaws.com" in file_url:
+            # Parse HTTPS S3 URL: https://bucket.s3.region.amazonaws.com/key
+            import re
+            match = re.match(r'https://([^.]+)\.s3\.[^.]+\.amazonaws\.com/(.+)', file_url)
+            if match:
+                bucket, key = match.groups()
+    
+    # If bucket/key still not set, try from video_data
+    if not bucket or not key:
+        if video_data.get("bucket"):
+            bucket = video_data.get("bucket")
+        if video_data.get("key"):
+            key = video_data.get("key")
+    
+    # Use video_data for tool if not set
+    if video_data.get("tool"):
+        tool_name = video_data.get("tool")
+    
+    # Extract video metadata from result
+    video_metadata = {}
+    if isinstance(result, dict) and "video_metadata" in result:
+        vm = result["video_metadata"]
+        video_metadata = {
+            "duration": vm.get("duration_seconds"),
+            "fps": vm.get("fps"),
+            "total_frames": vm.get("total_frames"),
+            "filename": key,
+            "format": "mp4",  # Default assumption
+            "resolution": f"{vm.get('width', 'N/A')}x{vm.get('height', 'N/A')}" if vm.get('width') and vm.get('height') else None
+        }
+    
+    # Format for frontend display
+    formatted_result = {
+        "job_id": job_id,
+        "status": status,
+        "video_info": {
+            "bucket": bucket,
+            "key": key,
+            "tool": tool_name,
+            "s3_url": file_url,
+            "filename": key if key else "Unknown",
+            **video_metadata
+        },
+        "analysis_results": result,
+        "has_blackframes": item.get("has_blackframes", False),
+        "has_text_detection": item.get("has_text_detection", False),
+        "summary": {}
+    }
+    
+    # Get summary from DynamoDB first if available
+    ddb_summary = item.get("summary", {})
+    if ddb_summary:
+        # Handle DynamoDB Map format
+        if isinstance(ddb_summary, dict) and 'M' in ddb_summary:
+            # DynamoDB Map format - extract values
+            summary_map = ddb_summary['M']
+            formatted_result["summary"] = {
+                "blackframes_count": int(summary_map.get("blackframes_count", {}).get("N", 0)),
+                "text_detections_count": int(summary_map.get("text_detections_count", {}).get("N", 0)),
+                "analysis_type": summary_map.get("analysis_type", {}).get("S", "basic")
+            }
+        else:
+            # Already processed format
+            formatted_result["summary"] = {
+                "blackframes_count": ddb_summary.get("blackframes_count", 0),
+                "text_detections_count": ddb_summary.get("text_detections_count", 0),
+                "analysis_type": ddb_summary.get("analysis_type", "basic")
+            }
+    else:
+        # Fallback to default values
+        formatted_result["summary"] = {
+            "blackframes_count": 0,
+            "text_detections_count": 0,
+            "analysis_type": "basic"
+        }
+    
+    # Check if this is a complete analysis result
+    if isinstance(result, dict):
+        # Handle complete analysis results (from analyze_video_complete tool)
+        if "blackframes" in result and "text_detection" in result:
+            formatted_result["has_blackframes"] = True
+            formatted_result["has_text_detection"] = True
+            formatted_result["summary"]["analysis_type"] = "complete"
+            
+            # Extract blackframes data
+            blackframes_data = result.get("blackframes", {})
+            if isinstance(blackframes_data, dict):
+                formatted_result["summary"]["blackframes_count"] = blackframes_data.get("blackframes_detected", 0)
+                black_frames_list = blackframes_data.get("black_frames", [])
+                
+                formatted_result["blackframes"] = {
+                    "count": blackframes_data.get("blackframes_detected", 0),
+                    "total_frames": blackframes_data.get("video_metadata", {}).get("total_frames", 0),
+                    "frames": [
+                        {
+                            "frame": bf.get("frame_number"),
+                            "timestamp": bf.get("timestamp"),
+                            "brightness": bf.get("brightness", 0) * 255  # Convert to 0-255 scale
+                        }
+                        for bf in black_frames_list
+                    ]
+                }
+            
+            # Extract text detection data
+            text_data = result.get("text_detection", {})
+            if isinstance(text_data, dict):
+                text_detections = text_data.get("text_detections", [])
+                formatted_result["summary"]["text_detections_count"] = len(text_detections)
+                
+                formatted_result["text_detection"] = {
+                    "count": len(text_detections),
+                    "texts": [
+                        {
+                            "text": td.get("DetectedText", ""),
+                            "confidence": td.get("Confidence", 0) / 100.0,  # Convert to 0-1 scale
+                            "timestamp": td.get("Timestamp", 0),
+                            "boundingBox": td.get("Geometry", {}).get("BoundingBox") if td.get("Geometry") else None
+                        }
+                        for td in text_detections
+                    ]
+                }
+        
+        # Handle blackframes-only results (from detect_blackframes tool)
+        elif "count" in result and "frames" in result and "total_frames" in result:
+            formatted_result["has_blackframes"] = True
+            formatted_result["summary"]["analysis_type"] = "blackframes_only"
+            
+            blackframes_count = result.get("count", 0)
+            black_frames_list = result.get("frames", [])
+            formatted_result["summary"]["blackframes_count"] = blackframes_count
+            
+            # Convert black_frames to frontend format
+            formatted_result["blackframes"] = {
+                "count": blackframes_count,
+                "total_frames": result.get("total_frames", 0),
+                "frames": [
+                    {
+                        "frame": bf.get("frame"),
+                        "timestamp": bf.get("timestamp"),
+                        "brightness": bf.get("brightness", 0)  # Already in correct scale from agent
+                    }
+                    for bf in black_frames_list
+                ]
+            }
+        
+        # Handle text detection-only results (from rekognition_detect_text tool)  
+        elif "texts" in result and "count" in result:
+            formatted_result["has_text_detection"] = True
+            formatted_result["summary"]["analysis_type"] = "text_only"
+            
+            text_detections = result.get("texts", [])
+            formatted_result["summary"]["text_detections_count"] = len(text_detections)
+            
+            # Convert text detections to frontend format
+            formatted_result["text_detection"] = {
+                "count": len(text_detections),
+                "texts": [
+                    {
+                        "text": td.get("text", ""),
+                        "confidence": td.get("confidence", 0) / 100.0 if td.get("confidence", 0) > 1 else td.get("confidence", 0),  # Already in 0-1 scale
+                        "timestamp": td.get("timestamp", 0),
+                        "boundingBox": td.get("bbox") if td.get("bbox") else None
+                    }
+                    for td in text_detections
+                ]
+            }
+    
+    return formatted_result
+
+
+@app.get("/jobs/{job_id}")
+async def get_job(
+    job_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Return latest document for a single job_id.
+    Supports both full and partial job IDs.
+    """
+    t = job_table()
+    
+    # If job_id is short (< 20 chars), scan for matching job
+    if len(job_id) < 20:
+        try:
+            resp = t.scan()
+            items = resp.get("Items", [])
+            matching_item = None
+            for item in items:
+                if item.get("job_id", "").startswith(job_id):
+                    matching_item = item
+                    job_id = item.get("job_id")  # Use full job_id
+                    break
+            if not matching_item:
+                raise HTTPException(status_code=404, detail="Job not found")
+            item = matching_item
+        except Exception as e:
+            logger.exception("get_job scan failed for %s", job_id)
+            raise HTTPException(status_code=500, detail=f"DynamoDB error: {e}")
+    else:
+        # Use direct lookup for full job IDs
+        try:
+            resp = t.get_item(Key={"job_id": job_id})
+            item = resp.get("Item")
+            if not item:
+                raise HTTPException(status_code=404, detail="Job not found")
+        except Exception as e:
+            logger.exception("get_job ddb failed for %s", job_id)
+            raise HTTPException(status_code=500, detail=f"DynamoDB error: {e}")
+    
+    return {"job_id": job_id, "status": item.get("status"), "result": item.get("analysis_results") or item.get("result"), "latest_doc": item}
+
+
+# --- Job Management Endpoints ---
+@app.delete("/jobs/{job_id}")
+async def delete_job(
+    job_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Delete a job from DynamoDB"""
+    t = job_table()
+    try:
+        resp = t.delete_item(Key={"job_id": job_id})
+        logger.info(f"Job {job_id} deleted by user {current_user['username']}")
+        return {"message": f"Job {job_id} deleted successfully"}
+    except Exception as e:
+        logger.exception("delete_job failed for %s", job_id)
+        raise HTTPException(status_code=500, detail=f"DynamoDB error: {e}")
+
+
+@app.post("/jobs/{job_id}/restart")
+async def restart_job(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Restart a job by resetting its status and re-enqueueing it"""
+    t = job_table()
+    try:
+        # Get the existing job
+        resp = t.get_item(Key={"job_id": job_id})
+        item = resp.get("Item")
+        if not item:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        # Extract video information for restart
+        video_data = item.get("video")
+        if video_data:
+            if isinstance(video_data, str):
+                try:
+                    video_info = json.loads(video_data)
+                except json.JSONDecodeError:
+                    raise HTTPException(status_code=400, detail="Invalid video data in job")
+            else:
+                video_info = video_data
+        else:
+            raise HTTPException(status_code=400, detail="No video information found in job")
+        
+        # Reset job status
+        save_job_entry(job_id, "queued", video=video_info)
+        
+        # Re-enqueue the job
+        bucket = video_info.get("bucket")
+        key = video_info.get("key") 
+        tool = video_info.get("tool", "detect_blackframes")
+        
+        if bucket and key:
+            background_tasks.add_task(start_worker_container, bucket, key, job_id, tool)
+            logger.info(f"Job {job_id} restarted by user {current_user['username']}")
+            return {"message": f"Job {job_id} restarted successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Missing bucket or key information")
+            
+    except Exception as e:
+        logger.exception("restart_job failed for %s", job_id)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/jobs/test")
+async def create_test_job(
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Create a test job with a predefined video for testing purposes"""
+    job_id = str(uuid.uuid4())
+    
+    # Test video configuration
+    test_video = {
+        "bucket": "christian-aws-development",
+        "key": "210518_G26M_M2_45Sec_16x9_ENG_Webmix.mp4",
+        "tool": "detect_blackframes"
+    }
+    
+    # Save job entry
+    save_job_entry(job_id, "queued", video=test_video)
+    
+    # Start worker
+    background_tasks.add_task(
+        start_worker_container, 
+        test_video["bucket"], 
+        test_video["key"], 
+        job_id, 
+        test_video["tool"]
+    )
+    
+    logger.info(f"Test job {job_id} created by user {current_user['username']}")
+    
+    return {
+        "message": "Test job created successfully",
+        "job_id": job_id,
+        "video": test_video
+    }
+
+
+# --- ZIP File Processing ---
+class UnzipJob(BaseModel):
+    bucket: str
+    key: str
+
+@app.post("/unzip")
+async def unzip_files(
+    jobs: List[UnzipJob],
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Unzip files and upload extracted contents back to S3"""
+    if not jobs:
+        raise HTTPException(status_code=400, detail="No ZIP files provided")
+    
+    job_ids = []
+    for zip_job in jobs:
+        # Validate that the file is a ZIP file
+        if not zip_job.key.lower().endswith('.zip'):
+            raise HTTPException(status_code=400, detail=f"File {zip_job.key} is not a ZIP file")
+        
+        # Create unique job ID for this unzip operation
+        job_id = str(uuid.uuid4())
+        
+        # Save job entry with ZIP file info
+        zip_info = {
+            "bucket": zip_job.bucket,
+            "key": zip_job.key,
+            "tool": "unzip_files"
+        }
+        
+        # Create job entry with proper fields for frontend display
+        table = job_table()
+        current_time = int(time.time())
+        
+        # Extract filename from key for display
+        file_name = zip_job.key.split('/')[-1] if '/' in zip_job.key else zip_job.key
+        
+        job_entry = {
+            "job_id": job_id,
+            "status": "queued",
+            "job_type": "unzip",
+            "file_name": file_name,
+            "s3_bucket": zip_job.bucket,
+            "s3_key": zip_job.key,
+            "file_url": f"s3://{zip_job.bucket}/{zip_job.key}",
+            "video": zip_info,
+            "created_at": current_time,
+            "updated_at": current_time
+        }
+        # Always remove job_status if present (legacy)
+        job_entry.pop("job_status", None)
+        table.put_item(Item=job_entry)
+        
+        # Start background task for unzipping
+        background_tasks.add_task(process_zip_file, zip_job.bucket, zip_job.key, job_id)
+        job_ids.append(job_id)
+        
+        logger.info(f"Unzip job {job_id} created for {zip_job.key} by user {current_user['username']}")
+    
+    return {
+        "message": f"Started {len(jobs)} unzip job(s)",
+        "job_ids": job_ids
+    }
+
+
+def process_zip_file(bucket: str, key: str, job_id: str):
+    """Background task to download, unzip, and re-upload ZIP file contents"""
+    try:
+        # Initialize DynamoDB table
+        table = boto3.resource("dynamodb", region_name=cfg("AWS_DEFAULT_REGION", "eu-central-1"), config=boto3_config).Table(cfg("JOB_TABLE", "proov_jobs"))
+        
+        logger.info(f"Starting unzip process for {key} (job {job_id})")
+        
+        # Update job status to processing
+        current_time = int(time.time())
+        table.update_item(
+            Key={"job_id": job_id},
+            UpdateExpression="SET #status = :status, updated_at = :updated_at REMOVE job_status",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={
+                ":status": "processing",
+                ":updated_at": current_time
+            }
+        )
+        
+        import tempfile
+        import zipfile
+        import os
+        
+        s3 = get_s3_client()
+        
+        # Create temporary directory for processing
+        with tempfile.TemporaryDirectory() as temp_dir:
+            zip_path = os.path.join(temp_dir, "archive.zip")
+            
+            # Download ZIP file from S3
+            logger.info(f"Downloading {key} from S3...")
+            s3.download_file(bucket, key, zip_path)
+            
+            # Extract ZIP file
+            extract_dir = os.path.join(temp_dir, "extracted")
+            os.makedirs(extract_dir, exist_ok=True)
+            
+            extracted_files = []
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                # Get list of files in the ZIP
+                file_list = zip_ref.namelist()
+                logger.info(f"ZIP contains {len(file_list)} files")
+                
+                # Extract all files with password support
+                try:
+                    zip_ref.extractall(extract_dir)
+                except RuntimeError as e:
+                    if "password" in str(e).lower() or "encrypted" in str(e).lower():
+                        logger.info("ZIP is encrypted, trying with default password")
+                        zip_ref.extractall(extract_dir, pwd=b"EdgesG26_2020!")
+                    else:
+                        raise
+                
+                # Upload each extracted file back to S3
+                for file_name in file_list:
+                    if not file_name.endswith('/'):  # Skip directories
+                        local_file_path = os.path.join(extract_dir, file_name)
+                        
+                        # Create S3 key for extracted file in same directory as ZIP
+                        key_parts = key.split('/')
+                        if key.endswith('.zip'):
+                            # Replace .zip with extracted filename
+                            key_parts[-1] = file_name
+                        else:
+                            # Just add filename to directory
+                            key_parts.append(file_name)
+                        s3_key = '/'.join(key_parts)
+                        
+                        if os.path.isfile(local_file_path):
+                            logger.info(f"Uploading {file_name} to S3 as {s3_key}")
+                            s3.upload_file(local_file_path, bucket, s3_key)
+                            extracted_files.append(s3_key)
+            
+            # Update job with results
+            result_summary = f"Successfully extracted and uploaded {len(extracted_files)} files: {', '.join(extracted_files[:10])}"
+            if len(extracted_files) > 10:
+                result_summary += f" and {len(extracted_files) - 10} more..."
+            
+            current_time = int(time.time())
+            table.update_item(
+                Key={"job_id": job_id},
+                UpdateExpression="SET #status = :status, results = :results, updated_at = :updated_at REMOVE job_status",
+                ExpressionAttributeNames={"#status": "status"},
+                ExpressionAttributeValues={
+                    ":status": "completed",
+                    ":results": result_summary,
+                    ":updated_at": current_time
+                }
+            )
+            
+            logger.info(f"Unzip job {job_id} completed successfully. Extracted {len(extracted_files)} files.")
+    
+    except Exception as e:
+        logger.exception(f"Unzip job {job_id} failed: {str(e)}")
+        
+        # Update job with error status
+        current_time = int(time.time())
+        table.update_item(
+            Key={"job_id": job_id},
+            UpdateExpression="SET #status = :status, results = :results, updated_at = :updated_at REMOVE job_status",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={
+                ":status": "failed",
+                ":results": f"Unzip failed: {str(e)}",
+                ":updated_at": current_time
+            }
+        )

@@ -1,0 +1,103 @@
+import React from 'react';
+import { useTranslation } from 'react-i18next';
+
+export default function Navbar({ currentPage, onNavigate }) {
+  const { t } = useTranslation();
+  
+  const navItems = [
+    { key: 'dashboard', label: t('dashboard') },
+    { key: 'video-player', label: 'Video Player' },
+  ];
+
+  return (
+    <nav style={{
+      backgroundColor: '#2c3e50',
+      padding: '0 20px',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+      borderBottom: '3px solid #3498db'
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        maxWidth: '1200px',
+        margin: '0 auto'
+      }}>
+        {/* Logo/Brand */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          padding: '15px 0'
+        }}>
+          <span style={{
+            fontSize: '24px',
+            fontWeight: 'bold',
+            color: '#ecf0f1'
+          }}>
+            Proovid
+          </span>
+          <span style={{
+            fontSize: '14px',
+            color: '#bdc3c7',
+            fontWeight: '500'
+          }}>
+            {t('videoAnalysis')}
+          </span>
+        </div>
+
+        {/* Navigation Items */}
+        <div style={{
+          display: 'flex',
+          gap: '0'
+        }}>
+          {navItems.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => onNavigate(item.key)}
+              style={{
+                background: currentPage === item.key ? '#3498db' : 'transparent',
+                color: currentPage === item.key ? 'white' : '#ecf0f1',
+                border: 'none',
+                padding: '12px 20px',
+                cursor: 'pointer',
+                fontSize: '16px',
+                fontWeight: '500',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                borderRadius: '0',
+                transition: 'all 0.3s ease',
+                borderBottom: currentPage === item.key ? '3px solid #2980b9' : '3px solid transparent'
+              }}
+              onMouseOver={(e) => {
+                if (currentPage !== item.key) {
+                  e.target.style.backgroundColor = '#34495e';
+                  e.target.style.borderBottomColor = '#3498db';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (currentPage !== item.key) {
+                  e.target.style.backgroundColor = 'transparent';
+                  e.target.style.borderBottomColor = 'transparent';
+                }
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {/* User Info (placeholder) */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          color: '#ecf0f1'
+        }}>
+          <span style={{ fontSize: '14px' }}>👤 User</span>
+        </div>
+      </div>
+    </nav>
+  );
+}

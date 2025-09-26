@@ -1,0 +1,80 @@
+{
+    "taskDefinitionArn": "arn:aws:ecs:eu-central-1:851725596604:task-definition/backend-task:47",
+    "containerDefinitions": [
+        {
+            "name": "backend",
+            "image": "851725596604.dkr.ecr.eu-central-1.amazonaws.com/backend:analyze-complete-v2",
+            "cpu": 0,
+            "portMappings": [
+                {
+                    "containerPort": 8000,
+                    "hostPort": 8000,
+                    "protocol": "tcp"
+                }
+            ],
+            "essential": true,
+            "environment": [
+                {
+                    "name": "AWS_DEFAULT_REGION",
+                    "value": "eu-central-1"
+                }
+            ],
+            "mountPoints": [],
+            "volumesFrom": [],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/backend",
+                    "awslogs-region": "eu-central-1",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            },
+            "systemControls": []
+        }
+    ],
+    "family": "backend-task",
+    "taskRoleArn": "arn:aws:iam::851725596604:role/ecsTaskRole",
+    "executionRoleArn": "arn:aws:iam::851725596604:role/ecsTaskExecutionRole",
+    "networkMode": "awsvpc",
+    "revision": 47,
+    "volumes": [],
+    "status": "ACTIVE",
+    "requiresAttributes": [
+        {
+            "name": "com.amazonaws.ecs.capability.logging-driver.awslogs"
+        },
+        {
+            "name": "ecs.capability.execution-role-awslogs"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.ecr-auth"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.19"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.task-iam-role"
+        },
+        {
+            "name": "ecs.capability.execution-role-ecr-pull"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.18"
+        },
+        {
+            "name": "ecs.capability.task-eni"
+        }
+    ],
+    "placementConstraints": [],
+    "compatibilities": [
+        "EC2",
+        "FARGATE"
+    ],
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "512",
+    "memory": "4096",
+    "registeredAt": "2025-09-07T21:28:23.529000+02:00",
+    "registeredBy": "arn:aws:iam::851725596604:user/admin"
+}

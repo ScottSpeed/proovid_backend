@@ -1,0 +1,28 @@
+{
+  "family": "backend-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "4096",
+  "executionRoleArn": "arn:aws:iam::851725596604:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::851725596604:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "851725596604.dkr.ecr.eu-central-1.amazonaws.com/backend:cognito-v2",
+      "essential": true,
+      "portMappings": [{"containerPort": 8000, "protocol": "tcp"}],
+      "environment": [
+        {"name":"AWS_DEFAULT_REGION","value":"eu-central-1"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/backend",
+          "awslogs-region": "eu-central-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

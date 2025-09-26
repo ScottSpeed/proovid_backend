@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: OpenSearch Serverless Collection für VECTOR-RAG
+
+Resources:
+  VideoVectorEncryptionPolicy:
+    Type: AWS::OpenSearchServerless::SecurityPolicy
+    Properties:
+      Name: video-vector-encryption-policy
+      Type: encryption
+      Policy: |
+        {
+          "Rules": [
+            {
+              "ResourceType": "collection",
+              "Resource": [
+                "collection/video-vector-collection"
+              ]
+            }
+          ],
+          "AWSOwnedKey": true
+        }
+
+  VideoVectorCollection:
+    Type: AWS::OpenSearchServerless::Collection
+    DependsOn: VideoVectorEncryptionPolicy
+    Properties:
+      Name: video-vector-collection
+      Type: VECTORSEARCH
+      Description: Vektor-DB für Video-RAG
+
+  VideoVectorAccessPolicy:
+    Type: AWS::OpenSearchServerless::AccessPolicy
+    Properties:
+      Name: video-vector-access-policy
+      Type: data
+      Policy: |
+        [
+          {
+            "Rules": [
+              {
+                "ResourceType": "index",
+                "Resource": [
+                  "index/video-vector-collection/*"
+                ],
+                "Permission": [
+                  "aoss:ReadDocument",
+                  "aoss:WriteDocument",
+                  "aoss:DescribeIndex"
+                ]
+              }
+            ],
+            "Principal": [
+              "arn:aws:iam::851725596604:user/admin"
+            ]
+          }
+        ]

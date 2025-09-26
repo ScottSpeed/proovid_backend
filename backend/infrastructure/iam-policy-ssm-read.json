@@ -1,0 +1,18 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowReadSpecificSSMParameters",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:GetParameterHistory"
+      ],
+      "Resource": [
+        "arn:aws:ssm:eu-central-1:851725596604:parameter/proov/backend/*",
+        "arn:aws:ssm:eu-central-1:851725596604:parameter/proov/worker/*"
+      ]
+    }
+  ]
+}

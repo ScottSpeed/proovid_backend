@@ -1,0 +1,85 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: "eu-central-1"
+    AWS_ACCOUNT_ID: "851725596604"
+    ECR_REPO_FRONTEND: "frontend"
+    ECR_REPO_BACKEND: "backend"
+    ECR_REPO_WORKER: "worker"
+    ECS_CLUSTER: "my-cluster"
+    ECS_SERVICE_BACKEND: "backend-service-new"
+    ECS_SERVICE_WORKER: "worker-service"
+    TASKDEF_FAMILY_BACKEND: "backend-task"
+    TASKDEF_FAMILY_WORKER: "worker-task"
+
+phases:
+  pre_build:
+    commands:
+      - echo "Login to ECR"
+      - aws --version
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - export IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:-$(date +%s)}
+      - echo "IMAGE_TAG=$IMAGE_TAG"
+
+  build:
+    commands:
+      - echo "Build backend image"
+      - docker build -t $ECR_REPO_BACKEND:latest backend/
+      - docker tag $ECR_REPO_BACKEND:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_BACKEND:$IMAGE_TAG
+      - echo "Build worker image"
+      - echo "Building worker image using backend/ as build context (so shared modules are included)"
+      - docker build -t $ECR_REPO_WORKER:latest -f backend/worker/Dockerfile backend/
+      - docker tag $ECR_REPO_WORKER:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:$IMAGE_TAG
+      - echo "Build frontend image"
+      - docker build -t $ECR_REPO_FRONTEND:latest frontend/
+      - docker tag $ECR_REPO_FRONTEND:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:$IMAGE_TAG
+
+  post_build:
+    commands:
+      - echo "Push images to ECR"
+      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_BACKEND:$IMAGE_TAG
+      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:$IMAGE_TAG
+      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:$IMAGE_TAG
+      - echo "Register new ECS task definitions and update services"
+
+      - |
+        # Backend taskdef: replace image placeholder in template and register
+        cp infrastructure/ecs-taskdef-backend.json /tmp/taskdef-backend.json
+        jq --arg img "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_BACKEND:$IMAGE_TAG" '.containerDefinitions[0].image = $img' /tmp/taskdef-backend.json > /tmp/taskdef-backend-2.json
+        aws ecs register-task-definition --cli-input-json file:///tmp/taskdef-backend-2.json
+
+      - |
+        # Optional: upload per-key SSM parameters if enabled in CodeBuild env
+        if [ "${UPLOAD_SSM:-0}" = "1" ]; then
+          echo "Uploading per-key SSM parameters from backend/config.json"
+          if [ -f backend/config.json ]; then
+            OPENSEARCH_HOST=$(jq -r '.OPENSEARCH_HOST // empty' backend/config.json)
+            OPENSEARCH_INDEX=$(jq -r '.OPENSEARCH_INDEX // empty' backend/config.json)
+            if [ -n "$OPENSEARCH_HOST" ]; then
+              aws ssm put-parameter --name "/proov/backend/OPENSEARCH_HOST" --value "$OPENSEARCH_HOST" --type SecureString --overwrite --region "$AWS_REGION"
+              aws ssm put-parameter --name "/proov/worker/OPENSEARCH_HOST" --value "$OPENSEARCH_HOST" --type SecureString --overwrite --region "$AWS_REGION"
+            fi
+            if [ -n "$OPENSEARCH_INDEX" ]; then
+              aws ssm put-parameter --name "/proov/backend/OPENSEARCH_INDEX" --value "$OPENSEARCH_INDEX" --type SecureString --overwrite --region "$AWS_REGION"
+              aws ssm put-parameter --name "/proov/worker/OPENSEARCH_INDEX" --value "$OPENSEARCH_INDEX" --type SecureString --overwrite --region "$AWS_REGION"
+            fi
+          else
+            echo "backend/config.json not found; skipping SSM upload"
+          fi
+        fi
+
+      - |
+        # Worker taskdef
+        cp infrastructure/ecs-taskdef-worker.json /tmp/taskdef-worker.json
+        jq --arg img "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:$IMAGE_TAG" '.containerDefinitions[0].image = $img' /tmp/taskdef-worker.json > /tmp/taskdef-worker-2.json
+        aws ecs register-task-definition --cli-input-json file:///tmp/taskdef-worker-2.json
+
+      - |
+        # Update services to force new deployment
+        aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE_BACKEND --force-new-deployment || true
+        aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE_WORKER --force-new-deployment || true
+
+artifacts:
+  files:
+    - '**/*'

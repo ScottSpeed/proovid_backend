@@ -1,0 +1,2 @@
+arn:aws:sns:eu-central-1:851725596604:AmazonRekognition - sns
+arn:aws:sqs:eu-central-1:851725596604:ai-analyzer - sqs

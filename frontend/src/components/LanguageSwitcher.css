@@ -1,0 +1,64 @@
+.language-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #2c3e50;
+  border: 1px solid #3498db;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3498db;
+  transition: all 0.3s ease;
+}
+
+.language-toggle-btn:hover {
+  background: #3498db;
+  color: white;
+}
+
+.language-flag {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.language-text {
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  .language-toggle-btn {
+    background: #1a1a1a;
+    border-color: #4dabf7;
+    color: #4dabf7;
+  }
+  
+  .language-toggle-btn:hover {
+    background: #4dabf7;
+    color: #1a1a1a;
+  }
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .language-switcher {
+    top: 15px;
+    right: 15px;
+  }
+  
+  .language-toggle-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  
+  .language-flag {
+    font-size: 14px;
+  }
+  
+  .language-text {
+    font-size: 10px;
+  }
+}
