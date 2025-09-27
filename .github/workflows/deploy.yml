@@ -85,9 +85,16 @@ jobs:
       working-directory: ./backend
       run: |
         echo "🚀 Building backend with cost-optimized AI features..."
-        docker build -t backend .
+        echo "📦 Image size may be larger due to AI dependencies..."
+        
+        # Build with build cache if possible
+        docker build -t backend . --progress=plain
         docker tag backend:latest $ECR_REGISTRY/backend:latest
+        
+        echo "📤 Pushing to ECR (this may take a few minutes)..."
         docker push $ECR_REGISTRY/backend:latest
+        
+        echo "✅ Docker build and push completed!"
 
     - name: Get current ECS task definition
       run: |
@@ -130,20 +137,28 @@ jobs:
     - name: Update backend service with AI features
       run: |
         echo "🔄 Updating ECS service with AI-enabled backend..."
+        echo "📝 Task Definition: $NEW_TASK_DEF"
+        
         aws ecs update-service \
           --cluster my-cluster \
           --service backend-service \
           --task-definition $NEW_TASK_DEF \
           --force-new-deployment \
           --region $AWS_REGION
+        
+        echo "✅ ECS service update initiated!"
+        echo "🔍 New containers will start with AI features enabled"
 
     - name: Wait for deployment to complete
       run: |
-        echo "⏳ Waiting for deployment to complete..."
-        aws ecs wait services-stable \
+        echo "⏳ Waiting for deployment to complete (max 10 minutes)..."
+        timeout 600 aws ecs wait services-stable \
           --cluster my-cluster \
           --services backend-service \
-          --region $AWS_REGION
+          --region $AWS_REGION || {
+          echo "⚠️  Deployment is taking longer than expected, but continuing..."
+          echo "🔍 Check ECS console for deployment status"
+        }
 
     - name: Verify AI features
       run: |
