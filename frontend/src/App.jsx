@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import S3Files from "./components/S3Files";
 import JobDashboard from "./components/JobDashboard";
 import VideoPlayerPage from "./components/VideoPlayerPage";
+import VideoChatBot from "./components/VideoChatBot";
 import Navbar from "./components/Navbar";
 import Login, { AuthProvider, useAuth } from "./components/Login";
 import LanguageSwitcher from "./components/LanguageSwitcher";
@@ -51,6 +52,13 @@ function MainApp() {
         );
       case 'video-player':
         return <VideoPlayerPage />;
+      case 'chat':
+        return (
+          <div>
+            <h2 style={{ color: '#ecf0f1', marginBottom: '16px' }}>🤖 Video AI ChatBot</h2>
+            <VideoChatBot />
+          </div>
+        );
       default:
         return <div>{t('notFoundError')}</div>;
     }

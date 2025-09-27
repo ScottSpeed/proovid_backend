@@ -26,6 +26,39 @@ from auth_cognito import (
 # Basic logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Import cost-optimized AWS features
+try:
+    from cost_optimized_aws_vector import get_cost_optimized_vector_db, get_cost_optimized_chatbot
+    COST_OPTIMIZED_AWS_AVAILABLE = True
+    logger.info("✅ Cost-optimized AWS Vector DB loaded successfully")
+except ImportError as e:
+    COST_OPTIMIZED_AWS_AVAILABLE = False
+    logger.warning(f"⚠️  Cost-optimized AWS Vector DB not available: {e}")
+
+# Import premium AWS features (fallback)
+try:
+    from aws_vector_db import get_aws_vector_db, get_aws_chatbot
+    PREMIUM_AWS_VECTOR_DB_AVAILABLE = True
+    logger.info("✅ Premium AWS Vector DB also available")
+except ImportError as e:
+    PREMIUM_AWS_VECTOR_DB_AVAILABLE = False
+    logger.warning(f"⚠️  Premium AWS Vector DB not available: {e}")
+
+# Fallback to local vector DB for development
+try:
+    from vector_db import get_vector_db, VideoVectorDB
+    from chatbot import get_chatbot, VideoRAGChatBot
+    LOCAL_VECTOR_DB_AVAILABLE = True
+    logger.info("✅ Local Vector DB modules available for development")
+except ImportError as e:
+    LOCAL_VECTOR_DB_AVAILABLE = False
+    logger.warning(f"⚠️  Local Vector DB modules not available: {e}")
+
+# Determine which system to use (prioritize cost-optimized)
+VECTOR_DB_AVAILABLE = COST_OPTIMIZED_AWS_AVAILABLE or PREMIUM_AWS_VECTOR_DB_AVAILABLE or LOCAL_VECTOR_DB_AVAILABLE
+USE_COST_OPTIMIZED = COST_OPTIMIZED_AWS_AVAILABLE and os.environ.get('USE_COST_OPTIMIZED', 'true').lower() == 'true'
+USE_AWS_NATIVE = PREMIUM_AWS_VECTOR_DB_AVAILABLE and os.environ.get('USE_AWS_NATIVE_VECTOR_DB', 'false').lower() == 'true'
 # increase opensearch/urllib3 logs for debugging if needed
 logging.getLogger("opensearch").setLevel(logging.INFO)
 logging.getLogger("urllib3").setLevel(logging.INFO)
@@ -284,6 +317,34 @@ class JobStatusItem(BaseModel):
 class JobStatusResponse(BaseModel):
     statuses: List[JobStatusItem]
 
+
+# --- New Models for Vector DB and ChatBot ---
+class ChatRequest(BaseModel):
+    message: str
+    context_limit: int = 5
+
+class ChatResponse(BaseModel):
+    response: str
+    matched_videos: List[Dict[str, Any]]
+    context_used: int
+    query: str
+    timestamp: str
+
+class SemanticSearchRequest(BaseModel):
+    query: str
+    limit: int = 10
+
+class SemanticSearchResponse(BaseModel):
+    results: List[Dict[str, Any]]
+    query: str
+    total_results: int
+
+class VectorStatsResponse(BaseModel):
+    total_videos: int
+    database_type: str
+    llm_provider: str = None
+    available: bool
+
 @app.get("/")
 async def root():
     return {"status": "ok"}
@@ -374,6 +435,30 @@ async def get_video_url(
 
 
 # --- Agent launcher (direct execution) ---
+def store_analysis_in_vector_db(job_id: str, video_metadata: Dict[str, Any], analysis_results: Dict[str, Any]):
+    """
+    Background task to store video analysis results in vector database
+    """
+    if not VECTOR_DB_AVAILABLE:
+        logger.info("Vector DB not available, skipping vector storage")
+        return
+    
+    try:
+        if USE_COST_OPTIMIZED:
+            vector_db = get_cost_optimized_vector_db()
+            db_type = "cost-optimized AWS"
+        elif USE_AWS_NATIVE:
+            vector_db = get_aws_vector_db()
+            db_type = "premium AWS"
+        else:
+            vector_db = get_vector_db()
+            db_type = "local"
+        
+        vector_db.store_video_analysis(job_id, video_metadata, analysis_results)
+        logger.info(f"Successfully stored job {job_id} in {db_type} vector database")
+    except Exception as e:
+        logger.error(f"Failed to store job {job_id} in vector DB: {e}")
+
 def start_agent_analysis(bucket: str, key: str, job_id: str, tool: str):
     """
     Startet eine direkte Agent-Analyse ohne Worker/SQS
@@ -399,8 +484,10 @@ def start_agent_analysis(bucket: str, key: str, job_id: str, tool: str):
             message = f"Can you find black frames in the video '{key}' from bucket '{bucket}'?"
         elif tool == "rekognition_detect_text":
             message = f"What text can you detect in the video '{key}' from bucket '{bucket}'?"
+        elif tool == "rekognition_detect_labels":
+            message = f"Can you detect labels and objects in the video '{key}' from bucket '{bucket}' using AWS Rekognition?"
         elif tool == "analyze_video_complete":
-            message = f"Can you perform a complete video analysis (blackframes and text detection) on video '{key}' from bucket '{bucket}'?"
+            message = f"Can you perform a complete video analysis (blackframes, text detection, and label detection) on video '{key}' from bucket '{bucket}'?"
         else:
             message = f"Can you analyze the video '{key}' from bucket '{bucket}' using tool '{tool}'?"
         
@@ -408,6 +495,15 @@ def start_agent_analysis(bucket: str, key: str, job_id: str, tool: str):
         logger.info("Executing agent with message: %s", message)
         response = agent(message)
         logger.info("Agent response received for job %s", job_id)
+        
+        # Parse analysis results for vector storage
+        try:
+            if isinstance(response, str):
+                analysis_results = json.loads(response) if response.startswith('{') else {"raw_result": response}
+            else:
+                analysis_results = response
+        except (json.JSONDecodeError, TypeError):
+            analysis_results = {"raw_result": str(response)}
         
         # Update job with results
         current_time = int(time.time())
@@ -421,6 +517,10 @@ def start_agent_analysis(bucket: str, key: str, job_id: str, tool: str):
                 ":updated_at": current_time
             }
         )
+        
+        # Store in vector database for semantic search
+        video_metadata = {"bucket": bucket, "key": key, "tool": tool}
+        store_analysis_in_vector_db(job_id, video_metadata, analysis_results)
         
         logger.info("Job %s completed successfully with agent", job_id)
         
@@ -441,6 +541,240 @@ def start_agent_analysis(bucket: str, key: str, job_id: str, tool: str):
             )
         except:
             logger.exception("Failed to update job %s error status", job_id)
+
+
+# --- New Endpoints: Semantic Search & ChatBot ---
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat_with_videos(
+    request: ChatRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Chat with AI about video content using semantic search
+    """
+    if not VECTOR_DB_AVAILABLE:
+        raise HTTPException(
+            status_code=503, 
+            detail="Vector database and chatbot features are not available. Please install requirements: pip install chromadb sentence-transformers anthropic"
+        )
+    
+    try:
+        if USE_COST_OPTIMIZED:
+            chatbot = get_cost_optimized_chatbot()
+        elif USE_AWS_NATIVE:
+            chatbot = get_aws_chatbot()
+        else:
+            chatbot = get_chatbot()
+        
+        result = chatbot.chat(request.message, request.context_limit)
+        
+        return ChatResponse(
+            response=result["response"],
+            matched_videos=result["matched_videos"],
+            context_used=result["context_used"],
+            query=result["query"],
+            timestamp=result["timestamp"]
+        )
+        
+    except Exception as e:
+        logger.exception("Chat request failed")
+        raise HTTPException(status_code=500, detail=f"Chat processing failed: {str(e)}")
+
+
+@app.post("/semantic-search", response_model=SemanticSearchResponse)
+async def semantic_search_videos(
+    request: SemanticSearchRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Perform semantic search across video metadata
+    """
+    if not VECTOR_DB_AVAILABLE:
+        raise HTTPException(
+            status_code=503, 
+            detail="Vector database features are not available"
+        )
+    
+    try:
+        if USE_COST_OPTIMIZED:
+            vector_db = get_cost_optimized_vector_db()
+        elif USE_AWS_NATIVE:
+            vector_db = get_aws_vector_db()
+        else:
+            vector_db = get_vector_db()
+        
+        results = vector_db.semantic_search(request.query, request.limit)
+        
+        return SemanticSearchResponse(
+            results=results,
+            query=request.query,
+            total_results=len(results)
+        )
+        
+    except Exception as e:
+        logger.exception("Semantic search failed")
+        raise HTTPException(status_code=500, detail=f"Semantic search failed: {str(e)}")
+
+
+@app.get("/chat/suggestions")
+async def get_chat_suggestions(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Get example questions users can ask the chatbot
+    """
+    if not VECTOR_DB_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Chatbot features are not available")
+    
+    try:
+        # Provide static suggestions for all AWS implementations
+        if USE_COST_OPTIMIZED or USE_AWS_NATIVE:
+            suggestions = [
+                "Zeig mir Videos mit Autos",
+                "Welche Videos haben eine Person in roten Kleidung?", 
+                "Finde Videos mit Text-Einblendungen",
+                "Gibt es Videos mit Blackframes?",
+                "Zeig mir Videos mit Sport-Aktivitäten",
+                "Welche Videos enthalten BMW Text?",
+                "Finde Videos mit Personen",
+                "Gibt es Videos in der Natur?",
+                "Zeig mir alle analysierten Videos",
+                "Welche Videos haben die meisten Labels?"
+            ]
+        else:
+            chatbot = get_chatbot()
+            suggestions = chatbot.get_suggestions()
+        return {"suggestions": suggestions}
+    except Exception as e:
+        logger.exception("Failed to get chat suggestions")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/vector-db/stats", response_model=VectorStatsResponse)
+async def get_vector_db_stats(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    Get vector database statistics
+    """
+    if not VECTOR_DB_AVAILABLE:
+        return VectorStatsResponse(
+            total_videos=0,
+            database_type="none",
+            available=False
+        )
+    
+    try:
+        if USE_COST_OPTIMIZED:
+            chatbot = get_cost_optimized_chatbot()
+        elif USE_AWS_NATIVE:
+            chatbot = get_aws_chatbot()
+        else:
+            vector_db = get_vector_db()
+            chatbot = get_chatbot()
+        
+        stats = chatbot.get_stats()
+        
+        return VectorStatsResponse(
+            total_videos=stats["total_videos"],
+            database_type=stats["database_type"],
+            llm_provider=stats["llm_provider"],
+            available=stats["available"]
+        )
+        
+    except Exception as e:
+        logger.exception("Failed to get vector DB stats")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/vector-db/reindex")
+async def reindex_existing_jobs(
+    background_tasks: BackgroundTasks,
+    current_user: Dict[str, Any] = Depends(require_admin)  # Only admins can reindex
+):
+    """
+    Reindex existing completed jobs into vector database
+    """
+    if not VECTOR_DB_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Vector database features are not available")
+    
+    try:
+        # Get all completed jobs from DynamoDB
+        table = job_table()
+        resp = table.scan()
+        items = resp.get("Items", [])
+        
+        completed_jobs = [
+            item for item in items 
+            if item.get("status") in ("completed", "done") 
+            and item.get("result") or item.get("analysis_results")
+        ]
+        
+        # Start background reindexing
+        background_tasks.add_task(reindex_jobs_background, completed_jobs)
+        
+        return {
+            "message": f"Started reindexing {len(completed_jobs)} completed jobs",
+            "job_count": len(completed_jobs)
+        }
+        
+    except Exception as e:
+        logger.exception("Reindexing failed")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def reindex_jobs_background(completed_jobs: List[Dict[str, Any]]):
+    """Background task to reindex existing jobs"""
+    if not VECTOR_DB_AVAILABLE:
+        return
+        
+    if USE_COST_OPTIMIZED:
+        vector_db = get_cost_optimized_vector_db()
+    elif USE_AWS_NATIVE:
+        vector_db = get_aws_vector_db()
+    else:
+        vector_db = get_vector_db()
+    
+    reindexed_count = 0
+    
+    for job in completed_jobs:
+        try:
+            job_id = job.get("job_id")
+            if not job_id:
+                continue
+            
+            # Extract video metadata
+            video_data = job.get("video", {})
+            if isinstance(video_data, str):
+                try:
+                    video_data = json.loads(video_data)
+                except json.JSONDecodeError:
+                    video_data = {}
+            
+            video_metadata = {
+                "bucket": video_data.get("bucket") or job.get("s3_bucket", ""),
+                "key": video_data.get("key") or job.get("s3_key", ""),
+                "tool": video_data.get("tool", "unknown")
+            }
+            
+            # Extract analysis results
+            result_raw = job.get("analysis_results") or job.get("result", "{}")
+            try:
+                if isinstance(result_raw, str):
+                    analysis_results = json.loads(result_raw) if result_raw.startswith('{') else {"raw_result": result_raw}
+                else:
+                    analysis_results = result_raw
+            except (json.JSONDecodeError, TypeError):
+                analysis_results = {"raw_result": str(result_raw)}
+            
+            # Store in vector database
+            vector_db.store_video_analysis(job_id, video_metadata, analysis_results)
+            reindexed_count += 1
+            
+            logger.info(f"Reindexed job {job_id} ({reindexed_count}/{len(completed_jobs)})")
+            
+        except Exception as e:
+            logger.error(f"Failed to reindex job {job.get('job_id', 'unknown')}: {e}")
+            continue
+    
+    logger.info(f"Reindexing completed. Successfully reindexed {reindexed_count}/{len(completed_jobs)} jobs")
 
 # --- Worker launcher (legacy SQS approach) ---
 def start_worker_container(bucket: str, key: str, job_id: str, tool: str):
@@ -499,10 +833,16 @@ async def analyze_videos(
         logger.info(f"Creating job {job_id} with tool: {video.tool}")
         # Save job entry to DynamoDB with correct status field
         save_job_entry(job_id, "queued", video=video.dict())
-        # Use worker with agent integration for scalability
-        background_tasks.add_task(
-            start_worker_container, video.bucket, video.key, job_id, video.tool
-        )
+        # Use direct agent analysis for new label detection features
+        if video.tool == "rekognition_detect_labels":
+            background_tasks.add_task(
+                start_agent_analysis, video.bucket, video.key, job_id, video.tool
+            )
+        else:
+            # Use worker for other tools
+            background_tasks.add_task(
+                start_worker_container, video.bucket, video.key, job_id, video.tool
+            )
         jobs.append(AnalyzeResponseJob(job_id=job_id, video=video))
     return AnalyzeResponse(jobs=jobs)
 

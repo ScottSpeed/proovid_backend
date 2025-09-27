@@ -7,6 +7,7 @@ export default function Navbar({ currentPage, onNavigate }) {
   const navItems = [
     { key: 'dashboard', label: t('dashboard') },
     { key: 'video-player', label: 'Video Player' },
+    { key: 'chat', label: '🤖 AI Chat' },
   ];
 
   return (

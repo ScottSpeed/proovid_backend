@@ -638,7 +638,8 @@ export default function S3Files({ onAnalyze, panelOpen, setPanelOpen }) {
 
     const toolMap = {
       "blackframe": "detect_blackframes",
-      "text": "rekognition_detect_text", 
+      "text": "rekognition_detect_text",
+      "labels": "rekognition_detect_labels",
       "complete": "analyze_video_complete"
     };
 
@@ -675,6 +676,7 @@ export default function S3Files({ onAnalyze, panelOpen, setPanelOpen }) {
         const analysisNames = {
           "blackframe": t('blackframeAnalysis'),
           "text": t('textAnalysis'),
+          "labels": "Label-Erkennung",
           "complete": t('completeAnalysis')
         };
         alert(`${analysisNames[analysisType]} ${t('startedFor')} ${videoList.length} ${t('videos')}!\nJob IDs: ${jobIds.join(", ")}`);
@@ -828,6 +830,22 @@ export default function S3Files({ onAnalyze, panelOpen, setPanelOpen }) {
           }}
         >
           📝 {t('textAnalysis')}
+        </button>
+        
+        <button 
+          onClick={() => handleAnalyze(Array.from(selected).map(key => files.find(f => f.key === key)).filter(Boolean), "labels")}
+          disabled={selected.size === 0}
+          style={{
+            padding: "6px 12px",
+            backgroundColor: selected.size > 0 ? "#9b59b6" : "#bdc3c7",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: selected.size > 0 ? "pointer" : "not-allowed",
+            fontSize: "12px"
+          }}
+        >
+          🏷️ Label-Erkennung
         </button>
         
         <button 
