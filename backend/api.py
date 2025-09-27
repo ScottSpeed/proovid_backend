@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Query, Depends
+from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Query, Depends, APIRouter
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -353,6 +353,36 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+# --- API Routes with /api/ prefix (for frontend compatibility) ---
+@app.get("/api/health")
+async def api_health():
+    return {"status": "ok"}
+
+@app.get("/api/jobs")
+async def api_list_jobs(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Get all jobs - duplicate endpoint with /api/ prefix"""
+    return await list_jobs(current_user)
+
+@app.get("/api/list-videos")
+async def api_list_videos(prefix: str = Query(default=""), current_user: Dict[str, Any] = Depends(get_current_user)):
+    """List videos - duplicate endpoint with /api/ prefix"""
+    return await list_videos(prefix, current_user)
+
+@app.post("/api/chat")
+async def api_chat(request: ChatRequest, current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Chat endpoint - duplicate with /api/ prefix"""
+    return await chat_with_videos(request, current_user)
+
+@app.get("/api/chat/suggestions")
+async def api_chat_suggestions(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Get chat suggestions - duplicate with /api/ prefix"""  
+    return await get_chat_suggestions(current_user)
+
+@app.get("/api/vector-db/stats")
+async def api_vector_db_stats(current_user: Dict[str, Any] = Depends(get_current_user)):
+    """Get vector DB stats - duplicate with /api/ prefix"""
+    return await get_vector_db_stats(current_user)
 
 
 # CORS preflight for /ask
