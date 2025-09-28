@@ -367,12 +367,12 @@ async def api_list_jobs(current_user: Dict[str, Any] = Depends(get_current_user)
 @app.get("/api/list-videos")
 async def api_list_videos(prefix: str = Query(default=""), current_user: Dict[str, Any] = Depends(get_current_user)):
     """List videos - duplicate endpoint with /api/ prefix"""
-    return await list_videos(prefix, current_user)
+    return await list_videos(prefix=prefix, current_user=current_user)
 
 @app.post("/api/chat")
 async def api_chat(request: ChatRequest, current_user: Dict[str, Any] = Depends(get_current_user)):
     """Chat endpoint - duplicate with /api/ prefix"""
-    return await chat_with_videos(request, current_user)
+    return await chat_with_videos(request=request, current_user=current_user)
 
 @app.get("/api/chat/suggestions")
 async def api_chat_suggestions(current_user: Dict[str, Any] = Depends(get_current_user)):
