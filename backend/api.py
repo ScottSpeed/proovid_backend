@@ -1485,3 +1485,12 @@ def process_zip_file(bucket: str, key: str, job_id: str):
                 ":updated_at": current_time
             }
         )
+
+# --- FINAL ATTEMPT: API Routes at END of file ---
+@app.get("/api/final-test")
+def api_final_test():
+    return {"final": "test", "location": "end-of-file"}
+
+@app.get("/api/health-final")  
+def api_health_final():
+    return {"status": "ok", "location": "end-of-file"}
