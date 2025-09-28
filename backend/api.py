@@ -67,8 +67,12 @@ app = FastAPI(title="Proov API", description="Enterprise Video Analysis API with
 
 # --- CRITICAL: API Routes with /api/ prefix (MUST be first!) ---
 @app.get("/api/health")
-async def api_health():
+def api_health():
     return {"status": "ok"}
+
+@app.get("/api/test")
+def api_test():
+    return {"test": "works"}
 
 # Initialize authentication system on startup
 @app.on_event("startup")
