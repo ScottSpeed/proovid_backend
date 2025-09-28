@@ -57,9 +57,15 @@ export default function VideoChatBot() {
     const apiBase = import.meta.env.VITE_API_URL || "";
     
     try {
-      // Use GET instead of POST for CloudFront compatibility
-      const encodedMessage = encodeURIComponent(message);
-      const response = await authenticatedFetch(`${apiBase}/ask?message=${encodedMessage}`);
+      // TEMPORARY: Show placeholder until backend deployment is complete
+      const placeholderMessage = {
+        type: 'bot',
+        content: `🚧 ChatBot is being deployed. Meanwhile, you can use Blackframe Detection which is working perfectly!`,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, placeholderMessage]);
+      setIsLoading(false);
+      return;
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${await response.text()}`);
