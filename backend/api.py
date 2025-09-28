@@ -393,6 +393,19 @@ async def ask_agent(
         logger.exception("agent error")
         raise HTTPException(status_code=500, detail=str(e))
 
+# --- Ask endpoint via GET for CloudFront compatibility ---
+@app.get("/ask")
+async def ask_agent_get(
+    message: str = Query(..., description="Message to ask the agent"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    try:
+        response = agent(message)
+        return {"response": str(response)}
+    except Exception as e:
+        logger.exception("agent error")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # --- S3 listing --- 
 @app.get("/list-videos")
