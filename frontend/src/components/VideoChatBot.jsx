@@ -57,14 +57,9 @@ export default function VideoChatBot() {
     const apiBase = import.meta.env.VITE_API_URL || "";
     
     try {
-      const response = await authenticatedFetch(`${apiBase}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: message,
-          context_limit: 5 
-        })
-      });
+      // Use GET instead of POST for CloudFront compatibility
+      const encodedMessage = encodeURIComponent(message);
+      const response = await authenticatedFetch(`${apiBase}/ask?message=${encodedMessage}`);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${await response.text()}`);
