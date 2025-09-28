@@ -17,7 +17,7 @@ export default function JobList({ jobs, panelOpen, onUpdate }) {
   if (!panelOpen) return null;
   const [statuses, setStatuses] = useState({})
   const [open, setOpen] = useState({})
-  const API = import.meta.env.VITE_API_URL || '/api'
+  const API = import.meta.env.VITE_API_URL || ''
 
   useEffect(() => {
     if (!jobs || jobs.length === 0) return

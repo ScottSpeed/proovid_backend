@@ -19,7 +19,7 @@ function MainApp() {
   };
 
   async function onAnalyze(videos) {
-    const apiBase = import.meta.env.VITE_API_URL || "/api";
+    const apiBase = import.meta.env.VITE_API_URL || "";
     try {
       const res = await authenticatedFetch(`${apiBase}/analyze`, {
         method: "POST",

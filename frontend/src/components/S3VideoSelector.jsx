@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 export default function S3VideoSelector({ isOpen, onClose, onVideoSelect }) {
   const { t } = useTranslation();
   const { authenticatedFetch } = useAuth();
-  const apiBase = import.meta.env.VITE_API_URL || "/api";
+  const apiBase = import.meta.env.VITE_API_URL || "";
   const [videos, setVideos] = useState([]);
   const [files, setFiles] = useState([]);
   const [prefix, setPrefix] = useState('');

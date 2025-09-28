@@ -25,7 +25,7 @@ export default function VideoChatBot() {
   }, []);
 
   const loadInitialData = async () => {
-    const apiBase = import.meta.env.VITE_API_URL || "/api";
+    const apiBase = import.meta.env.VITE_API_URL || "";
     
     try {
       // Load chat suggestions
@@ -54,7 +54,7 @@ export default function VideoChatBot() {
     setInputMessage('');
     setIsLoading(true);
 
-    const apiBase = import.meta.env.VITE_API_URL || "/api";
+    const apiBase = import.meta.env.VITE_API_URL || "";
     
     try {
       const response = await authenticatedFetch(`${apiBase}/chat`, {

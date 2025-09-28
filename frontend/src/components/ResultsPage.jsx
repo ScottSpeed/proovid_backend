@@ -11,7 +11,7 @@ const ResultsPage = ({ jobId, onBack }) => {
 
   useEffect(() => {
     const fetchResults = async () => {
-      const apiBase = import.meta.env.VITE_API_URL || "/api";
+      const apiBase = import.meta.env.VITE_API_URL || "";
       
       try {
         const response = await authenticatedFetch(`${apiBase}/jobs/${jobId}/results`);

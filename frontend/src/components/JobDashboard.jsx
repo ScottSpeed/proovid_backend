@@ -213,7 +213,7 @@ JobRow.displayName = 'JobRow';
 export default function JobDashboard() {
   const { authenticatedFetch } = useAuth();
   const { t } = useTranslation();
-  const apiBase = import.meta.env.VITE_API_URL || "/api";
+  const apiBase = import.meta.env.VITE_API_URL || "";
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState(null);

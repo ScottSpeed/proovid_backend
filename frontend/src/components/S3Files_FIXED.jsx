@@ -7,7 +7,7 @@ export default function S3Files({ onAnalyze, panelOpen, setPanelOpen }) {
   const [selectedFolder, setSelectedFolder] = useState(''); // Currently selected folder in tree
   const { authenticatedFetch } = useAuth();
   const { t } = useTranslation();
-  const apiBase = import.meta.env.VITE_API_URL || "/api";
+  const apiBase = import.meta.env.VITE_API_URL || "";
   const [prefix, setPrefix] = useState("");
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
