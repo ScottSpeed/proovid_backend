@@ -714,6 +714,14 @@ async def semantic_search_videos(
         logger.exception("Semantic search failed")
         raise HTTPException(status_code=500, detail=f"Semantic search failed: {str(e)}")
 
+# CORS preflight for /chat/suggestions
+@app.options("/chat/suggestions")
+async def options_chat_suggestions(request: Request):
+    return Response(status_code=200, headers={
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization"
+    })
 
 @app.get("/chat/suggestions")
 async def get_chat_suggestions(current_user: Dict[str, Any] = Depends(get_current_user)):
