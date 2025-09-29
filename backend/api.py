@@ -285,8 +285,8 @@ app.add_middleware(
 # OpenSearch client removed: we use DynamoDB for job storage now
 
 
-# --- Agent import (existing project) ---
-from worker.agent import agent  # noqa: E402
+# --- Agent import removed: Using placeholder responses for ChatBot ---
+# from worker.agent import agent  # Removed - agent framework was causing crashes
 
 
 # --- Models ---
@@ -386,8 +386,8 @@ async def ask_agent(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     try:
-        response = agent(request.message)
-        # agent may start background jobs and return additional info; keep generic
+        # Placeholder response - agent framework removed due to crashes
+        response = f"🚧 ChatBot is being rebuilt. Meanwhile, you can use Blackframe Detection which is working perfectly! Your question was: {request.message}"
         return {"response": str(response)}
     except Exception as e:
         logger.exception("agent error")
@@ -400,7 +400,8 @@ async def ask_agent_get(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     try:
-        response = agent(message)
+        # Placeholder response - agent framework removed due to crashes
+        response = f"🚧 ChatBot is being rebuilt. Meanwhile, you can use Blackframe Detection which is working perfectly! Your question was: {message}"
         return {"response": str(response)}
     except Exception as e:
         logger.exception("agent error")
@@ -512,10 +513,10 @@ def start_agent_analysis(bucket: str, key: str, job_id: str, tool: str):
         else:
             message = f"Can you analyze the video '{key}' from bucket '{bucket}' using tool '{tool}'?"
         
-        # Execute agent analysis
+        # Execute agent analysis - placeholder (agent framework removed)
         logger.info("Executing agent with message: %s", message)
-        response = agent(message)
-        logger.info("Agent response received for job %s", job_id)
+        response = f"🚧 Video analysis is being processed by worker. Job ID: {job_id}. Use /jobs endpoint to check status."
+        logger.info("Agent placeholder response for job %s", job_id)
         
         # Parse analysis results for vector storage
         try:
