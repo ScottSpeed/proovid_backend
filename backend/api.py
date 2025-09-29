@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Query, Depends, APIRouter
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response as StarletteResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any
 import logging
@@ -274,7 +276,7 @@ logger.info(f"CORS allow_origins: {allow_origins}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allow_origins,
+    allow_origins=["https://ui.proovid.de", "https://localhost:5173", "https://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -716,13 +718,25 @@ async def semantic_search_videos(
         logger.exception("Semantic search failed")
         raise HTTPException(status_code=500, detail=f"Semantic search failed: {str(e)}")
 
+# Universal CORS preflight for ALL endpoints
+@app.options("/{path:path}")
+async def universal_options(request: Request, path: str):
+    return Response(status_code=200, headers={
+        "Access-Control-Allow-Origin": "https://ui.proovid.de",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Expose-Headers": "*",
+        "Access-Control-Allow-Credentials": "true"
+    })
+
 # CORS preflight for /chat/suggestions
 @app.options("/chat/suggestions")
 async def options_chat_suggestions(request: Request):
     return Response(status_code=200, headers={
         "Access-Control-Allow-Origin": "https://ui.proovid.de",
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Expose-Headers": "*",
         "Access-Control-Allow-Credentials": "true"
     })
 
