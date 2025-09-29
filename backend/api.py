@@ -285,8 +285,80 @@ app.add_middleware(
 # OpenSearch client removed: we use DynamoDB for job storage now
 
 
-# --- Agent import removed: Using placeholder responses for ChatBot ---
+# --- Agent import removed: Using Direct AWS Bedrock for ChatBot ---
 # from worker.agent import agent  # Removed - agent framework was causing crashes
+
+# --- Direct AWS Bedrock ChatBot Implementation ---
+async def call_bedrock_chatbot(message: str) -> str:
+    """
+    Direct AWS Bedrock integration for ChatBot functionality.
+    Uses Claude 3 Haiku for cost-optimized AI responses.
+    """
+    try:
+        import boto3
+        import json
+        
+        # Initialize Bedrock client
+        bedrock = boto3.client('bedrock-runtime', region_name='eu-central-1')
+        
+        # Create system prompt for video analysis assistant
+        system_prompt = """You are a helpful video analysis assistant for a video processing platform. 
+
+Your capabilities include:
+- Blackframe Detection: Finding dark/black frames in videos
+- Label Detection: Identifying objects, people, activities in videos using AWS Rekognition  
+- Text Recognition: Extracting text from video frames
+- Video Analysis: Complete analysis combining multiple detection methods
+
+Users can upload videos and run analysis jobs. Be helpful and concise in your responses.
+If users ask about specific videos, explain they need to upload and analyze them first.
+"""
+
+        # Prepare the request for Claude 3 Haiku
+        request_body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 300,  # Keep responses concise for cost optimization
+            "system": system_prompt,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": message
+                }
+            ],
+            "temperature": 0.7,
+            "top_p": 0.9
+        }
+        
+        # Call Bedrock
+        response = bedrock.invoke_model(
+            modelId="anthropic.claude-3-haiku-20240307-v1:0",  # Cost-optimized model
+            body=json.dumps(request_body),
+            contentType="application/json"
+        )
+        
+        # Parse response
+        response_body = json.loads(response['body'].read())
+        
+        if 'content' in response_body and len(response_body['content']) > 0:
+            return response_body['content'][0]['text']
+        else:
+            return "🤖 I'm here to help with video analysis! Ask me about blackframe detection, label recognition, or text extraction from videos."
+            
+    except Exception as e:
+        logger.error(f"Bedrock ChatBot error: {e}")
+        # Graceful fallback to simple responses
+        message_lower = message.lower()
+        
+        if any(word in message_lower for word in ['blackframe', 'black frame', 'dark']):
+            return "🎬 Use our Blackframe Detection tool to find dark or black frames in your videos! Upload a video and select 'Detect Blackframes' to get started."
+        elif any(word in message_lower for word in ['label', 'object', 'detect', 'recognize']):
+            return "🏷️ Our Label Detection uses AWS Rekognition to identify objects, people, and activities in your videos. Upload a video and select 'Analyze Video Complete' for full analysis!"
+        elif any(word in message_lower for word in ['text', 'ocr', 'read']):
+            return "📝 We can extract text from video frames using AWS Rekognition Text Detection. Upload your video and run a complete analysis to see all detected text!"
+        elif any(word in message_lower for word in ['hello', 'hi', 'help']):
+            return "👋 Hi! I'm your video analysis assistant. I can help you with:\n• 🎬 Blackframe Detection\n• 🏷️ Object & Label Recognition\n• 📝 Text Extraction\n\nUpload a video to get started!"
+        else:
+            return f"🤖 I'm your video analysis assistant! I can help with blackframe detection, label recognition, and text extraction. What would you like to analyze? Your question: {message}"
 
 
 # --- Models ---
@@ -386,12 +458,14 @@ async def ask_agent(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     try:
-        # Placeholder response - agent framework removed due to crashes
-        response = f"🚧 ChatBot is being rebuilt. Meanwhile, you can use Blackframe Detection which is working perfectly! Your question was: {request.message}"
+        # Direct AWS Bedrock ChatBot implementation
+        response = await call_bedrock_chatbot(request.message)
         return {"response": str(response)}
     except Exception as e:
-        logger.exception("agent error")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("bedrock chatbot error")
+        # Fallback to placeholder if Bedrock fails
+        response = f"🚧 ChatBot temporarily unavailable. Meanwhile, you can use Blackframe Detection! Your question was: {request.message}"
+        return {"response": str(response)}
 
 # --- Ask endpoint via GET for CloudFront compatibility ---
 @app.get("/ask")
@@ -400,12 +474,14 @@ async def ask_agent_get(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     try:
-        # Placeholder response - agent framework removed due to crashes
-        response = f"🚧 ChatBot is being rebuilt. Meanwhile, you can use Blackframe Detection which is working perfectly! Your question was: {message}"
+        # Direct AWS Bedrock ChatBot implementation
+        response = await call_bedrock_chatbot(message)
         return {"response": str(response)}
     except Exception as e:
-        logger.exception("agent error")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("bedrock chatbot error")
+        # Fallback to placeholder if Bedrock fails
+        response = f"🚧 ChatBot temporarily unavailable. Meanwhile, you can use Blackframe Detection! Your question was: {message}"
+        return {"response": str(response)}
 
 
 # --- S3 listing --- 
