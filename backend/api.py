@@ -276,8 +276,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
 
 
@@ -718,9 +720,10 @@ async def semantic_search_videos(
 @app.options("/chat/suggestions")
 async def options_chat_suggestions(request: Request):
     return Response(status_code=200, headers={
-        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Origin": "https://ui.proovid.de",
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization"
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+        "Access-Control-Allow-Credentials": "true"
     })
 
 @app.get("/chat/suggestions")
