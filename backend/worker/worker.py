@@ -11,7 +11,7 @@ import threading
 import tempfile
 import zipfile
 from decimal import Decimal
-from agent import agent, rekognition_detect_text, detect_blackframes, analyze_video_complete
+from agent import rekognition_detect_text, detect_blackframes, analyze_video_complete, rekognition_detect_labels
 
 DIRECT_MODE = True
 TEST_MODE = False
@@ -194,6 +194,7 @@ tools_map = {
     "analyze_video_complete": analyze_video_complete,
     "detect_blackframes": detect_blackframes,
     "rekognition_detect_text": rekognition_detect_text,
+    "rekognition_detect_labels": rekognition_detect_labels,
     "process_zip_file": process_zip_file,
     "unzip_files": process_zip_file  # Alias for ZIP processing
 }
@@ -396,23 +397,19 @@ def _process_messages(messages):
                         raise ValueError("Result data was not generated")
                 
                 else:
-                    # Use the original agent framework
-                    logging.info("Using agent framework for tool execution")
-                    
-                    # Create a proper prompt for the agent
-                    if tool_name == "analyze_video_complete":
-                        file_url = agent_args.get("file_url", "")
-                        prompt = f"Please analyze the video at '{file_url}' comprehensively using the analyze_video_complete tool."
-                    elif tool_name == "detect_blackframes":
-                        file_url = agent_args.get("file_url", "")
-                        prompt = f"Please find black frames in the video at '{file_url}' using the detect_blackframes tool."
-                    elif tool_name == "rekognition_detect_text":
-                        file_url = agent_args.get("file_url", "")
-                        prompt = f"Please detect text in the video at '{file_url}' using the rekognition_detect_text tool."
+                    # Fallback to DIRECT_MODE since agent framework is disabled
+                    logging.warning("Agent framework requested but not available, falling back to DIRECT_MODE")
+                    if tool_name in tools_map:
+                        tool_function = tools_map[tool_name]
+                        bucket = agent_args.get("s3_bucket")
+                        key = agent_args.get("s3_key")
+                        
+                        if tool_name == "detect_blackframes":
+                            result = tool_function(bucket=bucket, s3_key=key)
+                        else:
+                            result = tool_function(bucket=bucket, video=key)
                     else:
-                        prompt = f"Please execute the {tool_name} tool with the provided arguments."
-                    
-                    result = agent(prompt)
+                        raise ValueError(f"Unknown tool: {tool_name}")
                     
                 logging.info("Job %s completed successfully", job_id)
                 

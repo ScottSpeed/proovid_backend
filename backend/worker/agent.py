@@ -1,5 +1,3 @@
-from strands import Agent, tool
-from strands_tools import calculator, current_time, python_repl
 import boto3
 import cv2
 import numpy as np
@@ -8,7 +6,6 @@ import tempfile
 import json
 import logging
 
-@tool 
 def rekognition_detect_labels(bucket: str = 'christian-aws-development', video: str = '210518_G26M_M2_45Sec_16x9_ENG_Webmix.mp4') -> str:
     """
     Erkennt Labels (Objekte, Personen, Aktivitäten, Szenen) in einem Video mit AWS Rekognition.
@@ -143,7 +140,6 @@ def rekognition_detect_labels(bucket: str = 'christian-aws-development', video: 
         logging.error(f"Error in rekognition_detect_labels: {e}")
         return json.dumps({"total_labels_detected": 0, "unique_labels": [], "error": str(e)}, indent=2)
 
-@tool
 def rekognition_detect_text(bucket: str = 'christian-aws-development', video: str = '210518_G26M_M2_45Sec_16x9_ENG_Webmix.mp4') -> str:
     """
     Erkennt Text in einem Video, das sich in einem S3-Bucket befindet.
@@ -231,7 +227,6 @@ def rekognition_detect_text(bucket: str = 'christian-aws-development', video: st
         logging.error(f"Error in rekognition_detect_text: {e}")
         return json.dumps({"count": 0, "texts": [], "error": str(e)}, indent=2)
 
-@tool
 def detect_blackframes(video_path: str = './Sample.mp4', bucket: str = None, s3_key: str = None) -> str:
     """
     Findet Blackframes im angegebenen Video (lokal oder aus S3) und gibt ein strukturiertes JSON-Ergebnis zurück.
@@ -294,7 +289,6 @@ def detect_blackframes(video_path: str = './Sample.mp4', bucket: str = None, s3_
     logging.info("detect_blackframes finished.")
     return json.dumps(result, indent=2)
 
-@tool 
 def analyze_video_complete(bucket: str = 'christian-aws-development', video: str = '210518_G26M_M2_45Sec_16x9_ENG_Webmix.mp4') -> str:
     """
     Führt eine vollständige Videoanalyse durch: Blackframe-Erkennung, Texterkennung UND Label-Erkennung.
@@ -357,17 +351,9 @@ def analyze_video_complete(bucket: str = 'christian-aws-development', video: str
     logging.info("analyze_video_complete finished.")
     return json.dumps(complete_result, indent=2)
 
-agent = Agent(
-    tools=[rekognition_detect_text, rekognition_detect_labels, detect_blackframes, analyze_video_complete],
-    model="eu.anthropic.claude-3-5-sonnet-20240620-v1:0"
-)
+# Agent setup removed - using DIRECT_MODE in worker.py
 
 if __name__ == "__main__":
-    message = """
-    I have 3 requests:
-
-    1. Can you find black frames in the video './backend/BlackframeVideo.mp4'?
-    2. What text can you detect in the video '210518_G26M_M2_45Sec_16x9_ENG_Webmix.mp4'?
-    3. Can you find this text in the video: "8,3 km; CO2 emissions combined: 189 g/km; CO2-class(es): G"
-    """
-    print(agent(message))
+    # Test blackframes detection
+    result = detect_blackframes(bucket='christian-aws-development', s3_key='BlackframeVideo.mp4')
+    print(result)
