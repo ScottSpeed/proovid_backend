@@ -439,12 +439,6 @@ async def root():
 async def health():
     return {"status": "ok"}
 
-# --- Simple Health Check for Load Balancer ---
-@app.get("/")
-async def root_health():
-    """Simple health check without any dependencies"""
-    return {"status": "healthy", "service": "backend"}
-
 # CORS preflight for /ask
 @app.options("/ask")
 async def options_ask(request: Request):
