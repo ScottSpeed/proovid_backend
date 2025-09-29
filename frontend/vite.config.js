@@ -6,7 +6,7 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
   define: {
-    // Override VITE_API_URL to empty string for direct backend access
-    'import.meta.env.VITE_API_URL': '""'
+    // Use proovid.de domain for API calls
+    'import.meta.env.VITE_API_URL': '"https://api.proovid.de"'
   }
 })
