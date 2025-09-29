@@ -30,20 +30,17 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
 
-    - name: Build and push backend image ULTRA FAST
+    - name: 🔥 BACKEND BUILD - SIMPLE & FAST
       working-directory: ./backend
       run: |
-        echo "⚡ ULTRA FAST BUILD - OPTIMIERT FÜR SPEED!"
+        echo "🔥 BACKEND BUILD - KEIN BUILDX BULLSHIT!"
         
-        # Multi-stage parallel build with cache
-        docker buildx create --use --driver docker-container --name speed-builder 2>/dev/null || true
-        docker buildx build \
-          --cache-from=type=registry,ref=$ECR_REGISTRY/backend:cache \
-          --cache-to=type=registry,ref=$ECR_REGISTRY/backend:cache,mode=max \
-          --push \
-          --tag $ECR_REGISTRY/backend:latest \
-          --platform linux/amd64 \
-          --progress=plain .
+        # EINFACH: Normales Docker Build - FUNKTIONIERT IMMER!
+        docker build -t backend:latest .
+        docker tag backend:latest $ECR_REGISTRY/backend:latest
+        docker push $ECR_REGISTRY/backend:latest
+        
+        echo "✅ Backend Image gepusht - OHNE ERRORS!"
 
     - name: Get current ECS task definition
       run: |
@@ -157,17 +154,17 @@ jobs:
     - name: Login to Amazon ECR
       uses: aws-actions/amazon-ecr-login@v2
 
-    - name: 🔥 WORKER BUILD - SEPARATES IMAGE
+    - name: 🔥 WORKER BUILD - KEIN BUILDX BULLSHIT
       working-directory: ./backend
       run: |
-        echo "🔥 WORKER BUILD - EIGENES IMAGE!"
+        echo "🔥 WORKER BUILD - SIMPLE DOCKER!"
         
-        # Worker Dockerfile ist EINFACH und FUNKTIONIERT
+        # EINFACH: Normales Docker Build - KEIN BUILDX!
         docker build -f worker/Dockerfile -t worker:latest .
         docker tag worker:latest $ECR_REGISTRY/worker:latest
         docker push $ECR_REGISTRY/worker:latest
         
-        echo "✅ Worker Image gepusht!"
+        echo "✅ Worker Image gepusht - OHNE BUILDX ERRORS!"
 
     - name: Update worker task definition
       run: |
