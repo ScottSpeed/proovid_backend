@@ -157,61 +157,37 @@ jobs:
     - name: Login to Amazon ECR
       uses: aws-actions/amazon-ecr-login@v2
 
-    - name: ⚡ ULTRA FAST WORKER BUILD
+    - name: 🔥 WORKER BUILD - EINFACH UND DIREKT
       working-directory: ./backend
       run: |
-        echo "⚡ PARALLEL WORKER BUILD!"
-        docker buildx build \
-          --cache-from=type=registry,ref=$ECR_REGISTRY/worker:cache \
-          --cache-to=type=registry,ref=$ECR_REGISTRY/worker:cache,mode=max \
-          --push \
-          --tag $ECR_REGISTRY/worker:latest \
-          --platform linux/amd64 \
-          -f worker/Dockerfile .
+        echo "🔥 WORKER BUILD - KEIN BULLSHIT!"
+        # Einfach das BACKEND Image verwenden - gleiche Dependencies!
+        docker build -t worker .
+        docker tag worker:latest $ECR_REGISTRY/worker:latest
+        docker push $ECR_REGISTRY/worker:latest
 
-    - name: Get current worker task definition
+    - name: Update worker task definition
       run: |
-        echo "📋 Getting current worker task definition..."
+        echo "📝 Worker Task Definition Update..."
+        
+        # Simple: Get existing task def and update image
         aws ecs describe-task-definition \
           --task-definition worker-task \
           --region $AWS_REGION \
-          --query 'taskDefinition' > current-worker-task-def.json
+          --query 'taskDefinition' > worker-task-def.json
 
-    - name: Update worker task definition with new image
-      run: |
-        echo "🔧 Updating worker image to latest..."
-        
-        # Create updated task definition with new image
-        jq --arg region "$AWS_REGION" \
-           --arg image "$ECR_REGISTRY/worker:latest" \
+        # Update image and register
+        jq --arg image "$ECR_REGISTRY/worker:latest" \
            '.containerDefinitions[0].image = $image |
+            .containerDefinitions[0].command = ["python", "-u", "worker/worker.py"] |
            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)' \
-           current-worker-task-def.json > updated-worker-task-def.json
+           worker-task-def.json > updated-worker-task-def.json
 
-    - name: Register new worker task definition
-      run: |
-        echo "📝 Registering new worker task definition..."
-        NEW_WORKER_TASK_DEF=$(aws ecs register-task-definition \
+        aws ecs register-task-definition \
           --cli-input-json file://updated-worker-task-def.json \
-          --region $AWS_REGION \
-          --query 'taskDefinition.taskDefinitionArn' \
-          --output text)
-        
-        echo "✅ New worker task definition: $NEW_WORKER_TASK_DEF"
-        echo "NEW_WORKER_TASK_DEF=$NEW_WORKER_TASK_DEF" >> $GITHUB_ENV
+          --region $AWS_REGION
 
-    - name: Update worker service with enhanced capabilities
-      run: |
-        echo "🔄 Updating worker service with AI features..."
-        aws ecs update-service \
-          --cluster my-cluster \
-          --service worker-service \
-          --task-definition $NEW_WORKER_TASK_DEF \
-          --force-new-deployment \
-          --region $AWS_REGION || {
-          echo "⚠️  Worker service update failed - this might be expected if service doesn't exist yet"
-          echo "🔄 Worker will be deployed with next job processing"
-        }
+        echo "✅ Worker Task Definition updated!"
 
   deploy-frontend:
     runs-on: ubuntu-latest
