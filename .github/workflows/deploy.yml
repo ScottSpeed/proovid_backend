@@ -30,17 +30,21 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
 
-    - name: 🔥 BACKEND BUILD - SIMPLE & FAST
+    - name: � BACKEND BUILD - BUILDX MIT REGISTRY CACHE
       working-directory: ./backend
       run: |
-        echo "🔥 BACKEND BUILD - KEIN BUILDX BULLSHIT!"
+        echo "� BACKEND BUILD - BUILDX MIT REGISTRY CACHE!"
         
-        # EINFACH: Normales Docker Build - FUNKTIONIERT IMMER!
-        docker build -t backend:latest .
-        docker tag backend:latest $ECR_REGISTRY/backend:latest
-        docker push $ECR_REGISTRY/backend:latest
+        # Setup buildx with docker-container driver for cache support
+        docker buildx create --name builder --driver docker-container --use 2>/dev/null || docker buildx use builder
         
-        echo "✅ Backend Image gepusht - OHNE ERRORS!"
+        # Build with registry cache (works in GitHub Actions)
+        docker buildx build \
+          --cache-from=type=registry,ref=$ECR_REGISTRY/backend:cache \
+          --cache-to=type=registry,ref=$ECR_REGISTRY/backend:cache,mode=max \
+          --push \
+          --tag $ECR_REGISTRY/backend:latest \
+          --platform linux/amd64 .
 
     - name: Get current ECS task definition
       run: |
@@ -154,17 +158,22 @@ jobs:
     - name: Login to Amazon ECR
       uses: aws-actions/amazon-ecr-login@v2
 
-    - name: 🔥 WORKER BUILD - KEIN BUILDX BULLSHIT
+    - name: ⚡ WORKER BUILD - BUILDX MIT REGISTRY CACHE
       working-directory: ./backend
       run: |
-        echo "🔥 WORKER BUILD - SIMPLE DOCKER!"
+        echo "⚡ WORKER BUILD - BUILDX MIT REGISTRY CACHE!"
         
-        # EINFACH: Normales Docker Build - KEIN BUILDX!
-        docker build -f worker/Dockerfile -t worker:latest .
-        docker tag worker:latest $ECR_REGISTRY/worker:latest
-        docker push $ECR_REGISTRY/worker:latest
+        # Use existing builder or create new one
+        docker buildx use builder 2>/dev/null || docker buildx create --name builder --driver docker-container --use
         
-        echo "✅ Worker Image gepusht - OHNE BUILDX ERRORS!"
+        # Build with registry cache for speed
+        docker buildx build \
+          --cache-from=type=registry,ref=$ECR_REGISTRY/worker:cache \
+          --cache-to=type=registry,ref=$ECR_REGISTRY/worker:cache,mode=max \
+          --push \
+          --tag $ECR_REGISTRY/worker:latest \
+          --platform linux/amd64 \
+          -f worker/Dockerfile .
 
     - name: Update worker task definition
       run: |
