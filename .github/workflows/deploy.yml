@@ -157,14 +157,17 @@ jobs:
     - name: Login to Amazon ECR
       uses: aws-actions/amazon-ecr-login@v2
 
-    - name: 🔥 WORKER BUILD - EINFACH UND DIREKT
+    - name: 🔥 WORKER BUILD - SEPARATES IMAGE
       working-directory: ./backend
       run: |
-        echo "🔥 WORKER BUILD - KEIN BULLSHIT!"
-        # Einfach das BACKEND Image verwenden - gleiche Dependencies!
-        docker build -t worker .
+        echo "🔥 WORKER BUILD - EIGENES IMAGE!"
+        
+        # Worker Dockerfile ist EINFACH und FUNKTIONIERT
+        docker build -f worker/Dockerfile -t worker:latest .
         docker tag worker:latest $ECR_REGISTRY/worker:latest
         docker push $ECR_REGISTRY/worker:latest
+        
+        echo "✅ Worker Image gepusht!"
 
     - name: Update worker task definition
       run: |
@@ -176,10 +179,9 @@ jobs:
           --region $AWS_REGION \
           --query 'taskDefinition' > worker-task-def.json
 
-        # Update image and register
+        # Update worker task definition with worker image
         jq --arg image "$ECR_REGISTRY/worker:latest" \
            '.containerDefinitions[0].image = $image |
-            .containerDefinitions[0].command = ["python", "-u", "worker/worker.py"] |
            del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)' \
            worker-task-def.json > updated-worker-task-def.json
 
