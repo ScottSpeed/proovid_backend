@@ -106,13 +106,15 @@ jobs:
 
     - name: Update task definition with AI environment variables
       run: |
-        echo "🔧 Adding AI environment variables to task definition..."
+        echo "🔧 Adding AI environment variables and updating image to task definition..."
         
-        # Create updated task definition with new environment variables
+        # Create updated task definition with new environment variables AND updated image
         jq --arg region "$AWS_REGION" \
            --arg use_cost_optimized "$USE_COST_OPTIMIZED" \
            --arg use_aws_native "$USE_AWS_NATIVE_VECTOR_DB" \
-           '.containerDefinitions[0].environment += [
+           --arg image "$ECR_REGISTRY/backend:latest" \
+           '.containerDefinitions[0].image = $image |
+           .containerDefinitions[0].environment += [
              {"name": "USE_COST_OPTIMIZED", "value": $use_cost_optimized},
              {"name": "USE_AWS_NATIVE_VECTOR_DB", "value": $use_aws_native},
              {"name": "AWS_DEFAULT_REGION", "value": $region}
@@ -231,12 +233,44 @@ jobs:
         docker tag worker:latest $ECR_REGISTRY/worker:latest
         docker push $ECR_REGISTRY/worker:latest
 
+    - name: Get current worker task definition
+      run: |
+        echo "📋 Getting current worker task definition..."
+        aws ecs describe-task-definition \
+          --task-definition worker-task \
+          --region $AWS_REGION \
+          --query 'taskDefinition' > current-worker-task-def.json
+
+    - name: Update worker task definition with new image
+      run: |
+        echo "🔧 Updating worker image to latest..."
+        
+        # Create updated task definition with new image
+        jq --arg region "$AWS_REGION" \
+           --arg image "$ECR_REGISTRY/worker:latest" \
+           '.containerDefinitions[0].image = $image |
+           del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)' \
+           current-worker-task-def.json > updated-worker-task-def.json
+
+    - name: Register new worker task definition
+      run: |
+        echo "📝 Registering new worker task definition..."
+        NEW_WORKER_TASK_DEF=$(aws ecs register-task-definition \
+          --cli-input-json file://updated-worker-task-def.json \
+          --region $AWS_REGION \
+          --query 'taskDefinition.taskDefinitionArn' \
+          --output text)
+        
+        echo "✅ New worker task definition: $NEW_WORKER_TASK_DEF"
+        echo "NEW_WORKER_TASK_DEF=$NEW_WORKER_TASK_DEF" >> $GITHUB_ENV
+
     - name: Update worker service with enhanced capabilities
       run: |
         echo "🔄 Updating worker service with AI features..."
         aws ecs update-service \
           --cluster my-cluster \
           --service worker-service \
+          --task-definition $NEW_WORKER_TASK_DEF \
           --force-new-deployment \
           --region $AWS_REGION || {
           echo "⚠️  Worker service update failed - this might be expected if service doesn't exist yet"
