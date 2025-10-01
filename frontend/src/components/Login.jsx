@@ -204,7 +204,7 @@ export default function Login({ onLoginSuccess }) {
           src={LogoGreen}
           alt="Proovid Logo" 
           style={{
-            height: isMobile ? '80px' : '120px',
+            height: isMobile ? '88px' : '120px',
             width: 'auto',
             marginBottom: isMobile ? '15px' : '20px',
             filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))',
