@@ -202,24 +202,7 @@ export default function Login({ onLoginSuccess }) {
             animation: 'logoGlow 3s ease-in-out infinite alternate'
           }} 
         />
-        <h1 style={{
-          fontSize: '36px',
-          fontWeight: 'bold',
-          color: '#52c41a',
-          textShadow: '0 2px 4px rgba(0,0,0,0.5)',
-          margin: '0 0 10px 0',
-          letterSpacing: '2px'
-        }}>
-          proovid.ai
-        </h1>
-        <p style={{
-          fontSize: '18px',
-          color: '#ecf0f1',
-          margin: '0',
-          fontWeight: '300'
-        }}>
-          Advanced Video Analysis Platform
-        </p>
+
       </div>
 
       <div style={{ 

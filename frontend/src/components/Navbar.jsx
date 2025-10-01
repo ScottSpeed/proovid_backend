@@ -1,13 +1,14 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import LogoGreen from '../assets/Logo_Green.png';
 
 export default function Navbar({ currentPage, onNavigate }) {
   const { t } = useTranslation();
   
   const navItems = [
-    { key: 'dashboard', label: t('dashboard') },
-    { key: 'video-player', label: 'Video Player' },
-    { key: 'chat', label: '🤖 AI Chat' },
+    { key: 'dashboard', label: t('dashboard'), icon: '📊' },
+    { key: 'video-player', label: 'Video Player', icon: '🎬' },
+    { key: 'chat', label: 'AI Chat', icon: '🤖' },
   ];
 
   return (
@@ -30,25 +31,46 @@ export default function Navbar({ currentPage, onNavigate }) {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '10px',
+            gap: '12px',
             padding: '15px 0',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            transition: 'all 0.3s ease'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.transform = 'scale(1.02)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.transform = 'scale(1)';
           }}
         >
-          <span style={{
-            fontSize: '24px',
-            fontWeight: 'bold',
-            color: '#ecf0f1'
-          }}>
-            proovid.ai
-          </span>
-          <span style={{
-            fontSize: '14px',
-            color: '#bdc3c7',
-            fontWeight: '500'
-          }}>
-            {t('videoAnalysis')}
-          </span>
+          <img 
+            src={LogoGreen} 
+            alt="Proovid Logo" 
+            style={{
+              height: '32px',
+              width: 'auto',
+              filter: 'brightness(1.1)',
+              transition: 'all 0.3s ease'
+            }} 
+          />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+            <span style={{
+              fontSize: '20px',
+              fontWeight: 'bold',
+              color: '#ecf0f1',
+              letterSpacing: '-0.5px'
+            }}>
+              proovid.ai
+            </span>
+            <span style={{
+              fontSize: '11px',
+              color: '#52c41a',
+              fontWeight: '500',
+              marginTop: '-2px'
+            }}>
+              {t('videoAnalysis')}
+            </span>
+          </div>
         </div>
 
         {/* Navigation Items */}
@@ -88,6 +110,7 @@ export default function Navbar({ currentPage, onNavigate }) {
                 }
               }}
             >
+              <span style={{ fontSize: '16px' }}>{item.icon}</span>
               {item.label}
             </button>
           ))}
