@@ -156,6 +156,15 @@ export default function Login({ onLoginSuccess }) {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const { login } = useAuth();
 
@@ -195,11 +204,13 @@ export default function Login({ onLoginSuccess }) {
           src={LogoGreen}
           alt="Proovid Logo" 
           style={{
-            height: '120px',
+            height: isMobile ? '60px' : '120px',
             width: 'auto',
-            marginBottom: '20px',
+            marginBottom: isMobile ? '15px' : '20px',
             filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))',
-            animation: 'logoGlow 3s ease-in-out infinite alternate'
+            animation: 'logoGlow 3s ease-in-out infinite alternate',
+            maxWidth: '90vw',
+            transition: 'all 0.3s ease'
           }} 
         />
 

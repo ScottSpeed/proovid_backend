@@ -53,24 +53,6 @@ export default function Navbar({ currentPage, onNavigate }) {
               transition: 'all 0.3s ease'
             }} 
           />
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-            <span style={{
-              fontSize: '20px',
-              fontWeight: 'bold',
-              color: '#ecf0f1',
-              letterSpacing: '-0.5px'
-            }}>
-              proovid.ai
-            </span>
-            <span style={{
-              fontSize: '11px',
-              color: '#52c41a',
-              fontWeight: '500',
-              marginTop: '-2px'
-            }}>
-              {t('videoAnalysis')}
-            </span>
-          </div>
         </div>
 
         {/* Navigation Items */}
