@@ -333,12 +333,21 @@ If users ask about specific videos, explain they need to upload and analyze them
             "top_p": 0.9
         }
         
-        # Call Bedrock
-        response = bedrock.invoke_model(
-            modelId="anthropic.claude-3-haiku-20240307-v1:0",  # Cost-optimized model
-            body=json.dumps(request_body),
-            contentType="application/json"
-        )
+        # Call Bedrock with timeout protection
+        import asyncio
+        try:
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    bedrock.invoke_model,
+                    modelId="anthropic.claude-3-haiku-20240307-v1:0",  # Cost-optimized model
+                    body=json.dumps(request_body),
+                    contentType="application/json"
+                ),
+                timeout=30.0  # 30 second timeout
+            )
+        except asyncio.TimeoutError:
+            logger.error("Bedrock request timeout after 30 seconds")
+            return "🚧 ChatBot is taking too long to respond. Please try again in a moment."
         
         # Parse response
         response_body = json.loads(response['body'].read())
@@ -432,7 +441,7 @@ class VectorStatsResponse(BaseModel):
 
 @app.get("/")
 async def root():
-    return {"status": "ok"}
+    return {"status": "healthy", "service": "proovid-backend"}
 
 # --- Health ---
 @app.get("/health")

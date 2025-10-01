@@ -25,18 +25,22 @@ export default function Navbar({ currentPage, onNavigate }) {
         margin: '0 auto'
       }}>
         {/* Logo/Brand */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          padding: '15px 0'
-        }}>
+        <div 
+          onClick={() => onNavigate('dashboard')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '15px 0',
+            cursor: 'pointer'
+          }}
+        >
           <span style={{
             fontSize: '24px',
             fontWeight: 'bold',
             color: '#ecf0f1'
           }}>
-            Proovid
+            proovid.ai
           </span>
           <span style={{
             fontSize: '14px',

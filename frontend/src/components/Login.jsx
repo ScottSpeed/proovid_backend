@@ -1,6 +1,7 @@
 import React, { useState, useContext, createContext, useEffect } from "react";
 import { signIn, signOut, getCurrentUser, fetchAuthSession } from 'aws-amplify/auth';
 import '../amplify-config.js';
+import LogoGreen from '../assets/Logo_Green.png';
 
 // Auth Context
 const AuthContext = createContext(null);
@@ -184,23 +185,41 @@ export default function Login({ onLoginSuccess }) {
       flexDirection: "column",
       justifyContent: "center"
     }}>
-      {/* PROOVID Animation - moved above login */}
-      <div className="proovid-container">
-        <div className="floating-particles">
-          <div className="particle"></div>
-          <div className="particle"></div>
-          <div className="particle"></div>
-          <div className="particle"></div>
-          <div className="particle"></div>
-          <div className="particle"></div>
-          <div className="particle"></div>
-          <div className="particle"></div>
-          <div className="particle"></div>
-        </div>
-        <div className="sparkle">
-          <h1 className="proovid-text">PROOVID</h1>
-        </div>
-        <p className="proovid-subtitle">Advanced Video Analysis Platform</p>
+      {/* Logo Section */}
+      <div style={{
+        textAlign: 'center',
+        marginBottom: '40px',
+        padding: '20px'
+      }}>
+        <img 
+          src={LogoGreen}
+          alt="Proovid Logo" 
+          style={{
+            height: '120px',
+            width: 'auto',
+            marginBottom: '20px',
+            filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))',
+            animation: 'logoGlow 3s ease-in-out infinite alternate'
+          }} 
+        />
+        <h1 style={{
+          fontSize: '36px',
+          fontWeight: 'bold',
+          color: '#52c41a',
+          textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+          margin: '0 0 10px 0',
+          letterSpacing: '2px'
+        }}>
+          proovid.ai
+        </h1>
+        <p style={{
+          fontSize: '18px',
+          color: '#ecf0f1',
+          margin: '0',
+          fontWeight: '300'
+        }}>
+          Advanced Video Analysis Platform
+        </p>
       </div>
 
       <div style={{ 

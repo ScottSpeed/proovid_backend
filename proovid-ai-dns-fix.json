@@ -1,0 +1,31 @@
+{
+  "Comment": "Fix proovid.ai DNS - redirect to working .de domain",
+  "Changes": [
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "proovid.ai",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "ui.proovid.de"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "UPSERT", 
+      "ResourceRecordSet": {
+        "Name": "ui.proovid.ai",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "ui.proovid.de"
+          }
+        ]
+      }
+    }
+  ]
+}

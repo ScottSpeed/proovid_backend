@@ -1,0 +1,57 @@
+{
+  "Comment": "SSL Certificate DNS Validation Records for proovid.ai",
+  "Changes": [
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "_8bd0f7d34e1138dc83161ad20e8e71a5.proovid.ai",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "_5a584825089e839a24b95cb87185541c.xlfgrmvvlj.acm-validations.aws"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "_4396ec9dc9f0ffe50eba1b187d5c4d09.www.proovid.ai",
+        "Type": "CNAME", 
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "_48b9638a07c126688bcf3fee590b59cd.xlfgrmvvlj.acm-validations.aws"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "_562c7a1177952bbfa3fe9a1178350437.ui.proovid.ai",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "_0364ab8dde06497caca42c0c4fdbd5d3.xlfgrmvvlj.acm-validations.aws"
+          }
+        ]
+      }
+    },
+    {
+      "Action": "CREATE",
+      "ResourceRecordSet": {
+        "Name": "_0322f15cac0d070f1f168112b3764ec2.api.proovid.ai",
+        "Type": "CNAME",
+        "TTL": 300,
+        "ResourceRecords": [
+          {
+            "Value": "_4800b1a428a7b1ef82ddd3c73319aafa.xlfgrmvvlj.acm-validations.aws"
+          }
+        ]
+      }
+    }
+  ]
+}
