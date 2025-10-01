@@ -200,19 +200,75 @@ export default function Login({ onLoginSuccess }) {
         marginBottom: '40px',
         padding: '20px'
       }}>
-        <img 
-          src={LogoGreen}
-          alt="Proovid Logo" 
-          style={{
-            height: isMobile ? '88px' : '120px',
-            width: 'auto',
-            marginBottom: isMobile ? '15px' : '20px',
-            filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))',
-            animation: 'logoGlow 3s ease-in-out infinite alternate',
-            maxWidth: '90vw',
-            transition: 'all 0.3s ease'
-          }} 
-        />
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          {/* Orbiting Stars */}
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: '1px',
+            height: '1px',
+            animation: 'orbit 8s linear infinite'
+          }}>
+            <span style={{
+              position: 'absolute',
+              fontSize: '14px',
+              color: '#52c41a',
+              textShadow: '0 0 10px #52c41a',
+              transform: `translate(-50%, -50%) translateY(-${isMobile ? '50px' : '70px'})`
+            }}>✦</span>
+          </div>
+          
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: '1px',
+            height: '1px',
+            animation: 'orbit 10s linear infinite reverse'
+          }}>
+            <span style={{
+              position: 'absolute',
+              fontSize: '12px',
+              color: '#3498db',
+              textShadow: '0 0 8px #3498db',
+              transform: `translate(-50%, -50%) translateY(-${isMobile ? '60px' : '80px'})`
+            }}>✨</span>
+          </div>
+          
+          <div style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: '1px',
+            height: '1px',
+            animation: 'orbit 12s linear infinite'
+          }}>
+            <span style={{
+              position: 'absolute',
+              fontSize: '10px',
+              color: '#f39c12',
+              textShadow: '0 0 6px #f39c12',
+              transform: `translate(-50%, -50%) translateY(-${isMobile ? '45px' : '60px'})`
+            }}>⭐</span>
+          </div>
+
+          <img 
+            src={LogoGreen}
+            alt="Proovid Logo" 
+            style={{
+              height: isMobile ? '88px' : '120px',
+              width: 'auto',
+              marginBottom: isMobile ? '15px' : '20px',
+              filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3)) drop-shadow(0 0 15px rgba(82, 196, 26, 0.1))',
+              animation: 'logoGlow 4s ease-in-out infinite alternate, logoFloat 6s ease-in-out infinite',
+              maxWidth: '90vw',
+              transition: 'all 0.3s ease',
+              position: 'relative',
+              zIndex: 10
+            }} 
+          />
+        </div>
 
       </div>
 
@@ -308,6 +364,28 @@ export default function Login({ onLoginSuccess }) {
           </button>
         </form>
       </div>
+      
+      {/* CSS Animations for the fancy effects */}
+      <style jsx>{`
+        @keyframes orbit {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        
+        @keyframes logoGlow {
+          from { 
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3)) drop-shadow(0 0 10px rgba(82, 196, 26, 0.1)); 
+          }
+          to { 
+            filter: drop-shadow(0 6px 15px rgba(0,0,0,0.4)) drop-shadow(0 0 25px rgba(82, 196, 26, 0.3)); 
+          }
+        }
+        
+        @keyframes logoFloat {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-3px); }
+        }
+      `}</style>
     </div>
   );
 }
