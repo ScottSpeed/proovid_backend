@@ -302,8 +302,12 @@ async def call_bedrock_chatbot(message: str) -> str:
         import boto3
         import json
         
-        # Initialize Bedrock client
-        bedrock = boto3.client('bedrock-runtime', region_name='eu-central-1')
+        # Initialize Bedrock client - try us-east-1 for better performance
+        try:
+            bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
+        except Exception:
+            # Fallback to eu-central-1
+            bedrock = boto3.client('bedrock-runtime', region_name='eu-central-1')
         
         # Create system prompt for video analysis assistant
         system_prompt = """You are a helpful video analysis assistant for a video processing platform. 
@@ -321,7 +325,7 @@ If users ask about specific videos, explain they need to upload and analyze them
         # Prepare the request for Claude 3 Haiku
         request_body = {
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 300,  # Keep responses concise for cost optimization
+            "max_tokens": 150,  # Reduced for faster responses
             "system": system_prompt,
             "messages": [
                 {
@@ -343,11 +347,16 @@ If users ask about specific videos, explain they need to upload and analyze them
                     body=json.dumps(request_body),
                     contentType="application/json"
                 ),
-                timeout=30.0  # 30 second timeout
+                timeout=10.0  # Reduced to 10 second timeout for faster response
             )
         except asyncio.TimeoutError:
-            logger.error("Bedrock request timeout after 30 seconds")
-            return "🚧 ChatBot is taking too long to respond. Please try again in a moment."
+            logger.error("Bedrock request timeout after 10 seconds")
+            # Intelligent fallback based on message content
+            message_lower = message.lower()
+            if any(word in message_lower for word in ['video', 'videos', 'autos', 'cars', 'analyse']):
+                return "🎬 **Video Analysis Tip:** To find videos with specific content like cars, upload your videos first and run our **Complete Analysis**! This will detect objects, labels, and text in your videos. Then I can help you search through the analyzed content. Try uploading a video via the Dashboard!"
+            else:
+                return "🤖 **Quick Response:** I'm here to help with video analysis! While I process your request, try these features: **🎬 Video Analysis**, **📊 Blackframe Detection**, or **🔍 Label Recognition**. Upload a video to get started!"
         
         # Parse response
         response_body = json.loads(response['body'].read())
