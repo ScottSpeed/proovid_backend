@@ -293,24 +293,89 @@ app.add_middleware(
 # from worker.agent import agent  # Removed - agent framework was causing crashes
 
 # --- Direct AWS Bedrock ChatBot Implementation ---
-async def call_bedrock_chatbot(message: str) -> str:
+async def call_bedrock_chatbot(message: str, user_id: str = None) -> str:
     """
     Direct AWS Bedrock integration for ChatBot functionality.
     Uses Claude 3 Haiku for cost-optimized AI responses.
+    Now includes video analysis data from user's completed jobs!
     """
     try:
         import boto3
         import json
         
-        # Initialize Bedrock client - try us-east-1 for better performance
-        try:
-            bedrock = boto3.client('bedrock-runtime', region_name='us-east-1')
-        except Exception:
-            # Fallback to eu-central-1
-            bedrock = boto3.client('bedrock-runtime', region_name='eu-central-1')
+        # Initialize clients
+        bedrock = boto3.client('bedrock-runtime', region_name='eu-central-1')
         
-        # Create system prompt for video analysis assistant
-        system_prompt = """You are a helpful video analysis assistant for a video processing platform. 
+        # Get user's video analysis results from DynamoDB
+        video_context = ""
+        try:
+            t = job_table()
+            resp = t.scan(Limit=100)  # Get recent jobs
+            jobs = resp.get("Items", [])
+            
+            # Filter completed jobs and extract analysis results
+            completed_jobs = []
+            for job in jobs:
+                if job.get("status") == "completed" and job.get("analysis_results"):
+                    try:
+                        # Parse video data
+                        video_info = job.get("video", {})
+                        if isinstance(video_info, str):
+                            video_info = json.loads(video_info)
+                        
+                        # Parse analysis results
+                        results = job.get("analysis_results", "{}")
+                        if isinstance(results, str):
+                            results = json.loads(results)
+                        
+                        # Extract key information for ChatBot
+                        video_name = video_info.get("name", job.get("s3_key", "Unknown"))
+                        labels = []
+                        texts = []
+                        
+                        # Extract labels from AWS Rekognition
+                        if "Labels" in results:
+                            for label in results["Labels"][:10]:  # Top 10 labels
+                                if label.get("Confidence", 0) > 80:
+                                    labels.append(label["Name"])
+                        
+                        # Extract detected text
+                        if "TextDetections" in results:
+                            for text in results["TextDetections"][:5]:  # Top 5 texts
+                                if text.get("Confidence", 0) > 80:
+                                    texts.append(text["DetectedText"])
+                        
+                        completed_jobs.append({
+                            "name": video_name,
+                            "labels": labels,
+                            "texts": texts,
+                            "job_id": job.get("job_id")
+                        })
+                    except Exception as e:
+                        logger.warning(f"Error parsing job {job.get('job_id')}: {e}")
+                        continue
+            
+            # Create context for ChatBot
+            if completed_jobs:
+                video_context = f"\n\nUSER'S ANALYZED VIDEOS ({len(completed_jobs)} videos):\n"
+                for i, video in enumerate(completed_jobs[:5], 1):  # Limit to 5 videos
+                    video_context += f"\n{i}. Video: {video['name']}"
+                    if video['labels']:
+                        video_context += f"\n   Labels detected: {', '.join(video['labels'])}"
+                    if video['texts']:
+                        video_context += f"\n   Text detected: {', '.join(video['texts'])}"
+                    video_context += f"\n   Job ID: {video['job_id']}"
+                
+                video_context += f"\n\nThe user can ask questions about these {len(completed_jobs)} analyzed videos."
+            else:
+                video_context = "\n\nUSER'S ANALYZED VIDEOS: No completed video analysis found. User should upload and analyze videos first."
+                
+        except Exception as e:
+            logger.warning(f"Failed to fetch video analysis data: {e}")
+            video_context = "\n\nUSER'S ANALYZED VIDEOS: Unable to fetch video data."
+        
+        # Create enhanced system prompt with video analysis context
+        system_prompt = f"""You are a helpful video analysis assistant for a video processing platform. 
 
 Your capabilities include:
 - Blackframe Detection: Finding dark/black frames in videos
@@ -318,8 +383,11 @@ Your capabilities include:
 - Text Recognition: Extracting text from video frames
 - Video Analysis: Complete analysis combining multiple detection methods
 
-Users can upload videos and run analysis jobs. Be helpful and concise in your responses.
-If users ask about specific videos, explain they need to upload and analyze them first.
+{video_context}
+
+Users can upload videos and run analysis jobs. Be helpful and answer questions about their analyzed videos.
+If users ask about content like cars, objects, or text, refer to their analyzed video data above.
+If they have no analyzed videos, explain they need to upload and analyze videos first.
 """
 
         # Prepare the request for Claude 3 Haiku
@@ -480,8 +548,9 @@ async def ask_agent(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     try:
-        # Direct AWS Bedrock ChatBot implementation
-        response = await call_bedrock_chatbot(request.message)
+        # Direct AWS Bedrock ChatBot implementation with video context
+        user_id = current_user.get("user_id", "unknown")
+        response = await call_bedrock_chatbot(request.message, user_id)
         return {"response": str(response)}
     except Exception as e:
         logger.exception("bedrock chatbot error")
@@ -496,8 +565,9 @@ async def ask_agent_get(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     try:
-        # Direct AWS Bedrock ChatBot implementation
-        response = await call_bedrock_chatbot(message)
+        # Direct AWS Bedrock ChatBot implementation with video context
+        user_id = current_user.get("user_id", "unknown")
+        response = await call_bedrock_chatbot(message, user_id)
         return {"response": str(response)}
     except Exception as e:
         logger.exception("bedrock chatbot error")
