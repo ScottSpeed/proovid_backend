@@ -276,7 +276,12 @@ logger.info(f"CORS allow_origins: {allow_origins}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://ui.proovid.de", "https://localhost:5173", "https://127.0.0.1:5173"],
+    allow_origins=[
+        "https://proovid.ai",           # 🔥 NEW COOL DOMAIN! 
+        "https://ui.proovid.de",        # Legacy domain
+        "https://localhost:5173", 
+        "https://127.0.0.1:5173"
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
