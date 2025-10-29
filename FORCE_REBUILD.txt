@@ -1,0 +1,6 @@
+# FORCE DOCKER REBUILD
+# This file forces GitHub Actions to rebuild without cache
+Build timestamp: 2025-10-29T23:07:00Z
+Force rebuild: true
+No cache: enabled
+Fresh BMW data fix: ready to deploy

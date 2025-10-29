@@ -456,8 +456,8 @@ If they have no analyzed videos, explain they need to upload and analyze videos 
         # Call Bedrock with timeout protection
         import asyncio
         try:
-            # Get timeout from environment variable, default to 25 seconds
-            bedrock_timeout = float(os.getenv('BEDROCK_TIMEOUT', '25.0'))
+            # Get timeout from environment variable, default to 20 seconds (Load Balancer safe)
+            bedrock_timeout = float(os.getenv('BEDROCK_TIMEOUT', '20.0'))
             
             print(f"[DIAGNOSTIC] Calling Bedrock with {len(video_context)} chars of video context")
             print(f"[DIAGNOSTIC] Message: {message[:100]}...")
@@ -474,7 +474,7 @@ If they have no analyzed videos, explain they need to upload and analyze videos 
             )
             print(f"[DIAGNOSTIC] Bedrock responded successfully")
         except asyncio.TimeoutError:
-            bedrock_timeout = float(os.getenv('BEDROCK_TIMEOUT', '25.0'))
+            bedrock_timeout = float(os.getenv('BEDROCK_TIMEOUT', '20.0'))
             logger.error(f"Bedrock request timeout after {bedrock_timeout} seconds")
             print(f"[DIAGNOSTIC] TIMEOUT after {bedrock_timeout}s - video_context length: {len(video_context)}")
             # Intelligent fallback based on message content
