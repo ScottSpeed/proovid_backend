@@ -6,7 +6,7 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
   define: {
-    // Use proovid.de domain for API calls
+    // Use proovid.de API - works reliably, CORS configured for proovid.ai frontend
     'import.meta.env.VITE_API_URL': '"https://api.proovid.de"'
   }
 })
