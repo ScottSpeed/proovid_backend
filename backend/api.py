@@ -340,12 +340,16 @@ async def call_bedrock_chatbot(message: str, user_id: str = None) -> str:
                             # DynamoDB format: {"M": {"key": {"S": "value"}}}
                             video_info = {}
                             for k, v in video_info_raw['M'].items():
-                                video_info[k] = v.get('S', v)
-                        else:
+                                if isinstance(v, dict) and 'S' in v:
+                                    video_info[k] = v['S']
+                                else:
+                                    video_info[k] = v
+                        elif isinstance(video_info_raw, str):
+                            video_info = json.loads(video_info_raw)
+                        elif isinstance(video_info_raw, dict):
                             video_info = video_info_raw
-                            
-                        if isinstance(video_info, str):
-                            video_info = json.loads(video_info)
+                        else:
+                            video_info = {}
                         
                         # Parse analysis results
                         if isinstance(result, str):
