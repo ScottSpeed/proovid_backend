@@ -336,6 +336,8 @@ async def call_bedrock_chatbot(message: str, user_id: str = None) -> str:
                     try:
                         # Parse video data - handle both nested and flat structure  
                         video_info_raw = job.get("video_info", job.get("video", {}))
+                        print(f"[DIAGNOSTIC] video_info_raw type: {type(video_info_raw)}, value: {video_info_raw}")
+                        
                         if isinstance(video_info_raw, dict) and 'M' in video_info_raw:
                             # DynamoDB format: {"M": {"key": {"S": "value"}}}
                             video_info = {}
@@ -345,11 +347,16 @@ async def call_bedrock_chatbot(message: str, user_id: str = None) -> str:
                                 else:
                                     video_info[k] = v
                         elif isinstance(video_info_raw, str):
-                            video_info = json.loads(video_info_raw)
+                            try:
+                                video_info = json.loads(video_info_raw)
+                            except:
+                                video_info = {}
                         elif isinstance(video_info_raw, dict):
                             video_info = video_info_raw
                         else:
                             video_info = {}
+                            
+                        print(f"[DIAGNOSTIC] video_info after parsing: type={type(video_info)}, value={video_info}")
                         
                         # Parse analysis results
                         if isinstance(result, str):
@@ -360,6 +367,11 @@ async def call_bedrock_chatbot(message: str, user_id: str = None) -> str:
                         # Extract key information for ChatBot
                         s3_key_raw = job.get("s3_key", {})
                         s3_key = s3_key_raw.get('S', s3_key_raw) if isinstance(s3_key_raw, dict) else s3_key_raw
+                        
+                        # Ensure video_info is a dict before calling .get()
+                        if not isinstance(video_info, dict):
+                            print(f"[ERROR] video_info is not a dict: {type(video_info)} - {video_info}")
+                            video_info = {}
                         
                         video_name = video_info.get("filename", video_info.get("key", s3_key or "Unknown"))
                         labels = []
