@@ -6,7 +6,7 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
   define: {
-    // Use consistent .ai domain for both frontend and backend API
-    'import.meta.env.VITE_API_URL': '"https://api.proovid.ai"'
+    // Emergency fix: Use .de domain (has valid SSL certificate)
+    'import.meta.env.VITE_API_URL': '"https://api.proovid.de"'
   }
 })

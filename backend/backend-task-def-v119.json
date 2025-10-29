@@ -1,0 +1,52 @@
+{
+    "family": "backend-task",
+    "taskRoleArn": "arn:aws:iam::851725596604:role/ecsTaskRole",
+    "executionRoleArn": "arn:aws:iam::851725596604:role/ecsTaskExecutionRole",
+    "networkMode": "awsvpc",
+    "requiresCompatibilities": ["FARGATE"],
+    "cpu": "512",
+    "memory": "4096",
+    "containerDefinitions": [
+        {
+            "name": "backend",
+            "image": "851725596604.dkr.ecr.eu-central-1.amazonaws.com/backend:latest",
+            "essential": true,
+            "portMappings": [
+                {
+                    "containerPort": 8000,
+                    "protocol": "tcp"
+                }
+            ],
+            "environment": [
+                {
+                    "name": "FRONTEND_ORIGINS",
+                    "value": "https://proovid.ai,https://ui.proovid.de,https://localhost:5173,https://127.0.0.1:5173"
+                },
+                {
+                    "name": "AWS_DEFAULT_REGION",
+                    "value": "eu-central-1"
+                },
+                {
+                    "name": "JOB_TABLE",
+                    "value": "proov_jobs"
+                },
+                {
+                    "name": "SQS_QUEUE_URL",
+                    "value": "https://sqs.eu-central-1.amazonaws.com/851725596604/proov-worker-queue"
+                },
+                {
+                    "name": "FORCE_REFRESH",
+                    "value": "v119_refresh"
+                }
+            ],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "/ecs/backend",
+                    "awslogs-region": "eu-central-1",
+                    "awslogs-stream-prefix": "ecs"
+                }
+            }
+        }
+    ]
+}
