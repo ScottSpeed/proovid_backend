@@ -258,7 +258,7 @@ import re
 
 frontend_origins = os.environ.get(
     "FRONTEND_ORIGINS",
-    "https://ui.proovid.de,https://localhost:5173,https://127.0.0.1:5173"
+    "https://proovid.ai,https://ui.proovid.de,https://localhost:5173,https://127.0.0.1:5173"
 )
 origins_raw = frontend_origins.strip()
 if origins_raw == "*":
@@ -268,6 +268,7 @@ else:
     allow_origins = [o.strip() for o in re.split(r"[ ,]+", origins_raw) if o.strip()]
     if not allow_origins:
         allow_origins = [
+            "https://proovid.ai",
             "https://ui.proovid.de",
             "https://localhost:5173",
             "https://127.0.0.1:5173"
@@ -318,46 +319,69 @@ async def call_bedrock_chatbot(message: str, user_id: str = None) -> str:
             resp = t.scan(Limit=100)  # Get recent jobs
             jobs = resp.get("Items", [])
             
+            print(f"[DIAGNOSTIC] DynamoDB scan returned {len(jobs)} jobs")
+            
             # Filter completed jobs and extract analysis results
             completed_jobs = []
             for job in jobs:
-                if job.get("status") == "completed" and job.get("analysis_results"):
+                # Extract values from DynamoDB format {"S": "value"} or direct value
+                job_id = job.get('job_id', {}).get('S', job.get('job_id', 'unknown'))
+                status = job.get('status', {}).get('S', job.get('status', ''))
+                result = job.get('result', {}).get('S', job.get('result', ''))
+                
+                print(f"[DIAGNOSTIC] Job {job_id}: status='{status}', has_result={bool(result)}")
+                
+                if status == "done" and result:
+                    print(f"[DIAGNOSTIC] Processing completed job: {job_id}")
                     try:
-                        # Parse video data
-                        video_info = job.get("video", {})
+                        # Parse video data - handle both nested and flat structure  
+                        video_info_raw = job.get("video_info", job.get("video", {}))
+                        if isinstance(video_info_raw, dict) and 'M' in video_info_raw:
+                            # DynamoDB format: {"M": {"key": {"S": "value"}}}
+                            video_info = {}
+                            for k, v in video_info_raw['M'].items():
+                                video_info[k] = v.get('S', v)
+                        else:
+                            video_info = video_info_raw
+                            
                         if isinstance(video_info, str):
                             video_info = json.loads(video_info)
                         
                         # Parse analysis results
-                        results = job.get("analysis_results", "{}")
-                        if isinstance(results, str):
-                            results = json.loads(results)
+                        if isinstance(result, str):
+                            results = json.loads(result)
+                        else:
+                            results = result
                         
                         # Extract key information for ChatBot
-                        video_name = video_info.get("name", job.get("s3_key", "Unknown"))
+                        s3_key_raw = job.get("s3_key", {})
+                        s3_key = s3_key_raw.get('S', s3_key_raw) if isinstance(s3_key_raw, dict) else s3_key_raw
+                        
+                        video_name = video_info.get("filename", video_info.get("key", s3_key or "Unknown"))
                         labels = []
                         texts = []
                         
-                        # Extract labels from AWS Rekognition
-                        if "Labels" in results:
-                            for label in results["Labels"][:10]:  # Top 10 labels
-                                if label.get("Confidence", 0) > 80:
-                                    labels.append(label["Name"])
+                        # Extract labels from our analysis structure
+                        if "label_detection" in results and "unique_labels" in results["label_detection"]:
+                            for label in results["label_detection"]["unique_labels"][:15]:  # Top 15 labels
+                                if label.get("max_confidence", 0) > 70:
+                                    labels.append(label["name"])
                         
-                        # Extract detected text
-                        if "TextDetections" in results:
-                            for text in results["TextDetections"][:5]:  # Top 5 texts
-                                if text.get("Confidence", 0) > 80:
-                                    texts.append(text["DetectedText"])
+                        # Extract detected text from our analysis structure
+                        if "text_detection" in results and "text_detections" in results["text_detection"]:
+                            for text in results["text_detection"]["text_detections"][:10]:  # Top 10 texts
+                                if text.get("confidence", 0) > 50:
+                                    texts.append(text["text"])
                         
                         completed_jobs.append({
                             "name": video_name,
                             "labels": labels,
                             "texts": texts,
-                            "job_id": job.get("job_id")
+                            "job_id": job_id
                         })
+                        print(f"[DIAGNOSTIC] Added job {job_id}: {len(labels)} labels, {len(texts)} texts")
                     except Exception as e:
-                        logger.warning(f"Error parsing job {job.get('job_id')}: {e}")
+                        print(f"[DIAGNOSTIC] Error parsing job {job_id}: {e}")
                         continue
             
             # Create context for ChatBot
@@ -378,6 +402,9 @@ async def call_bedrock_chatbot(message: str, user_id: str = None) -> str:
         except Exception as e:
             logger.warning(f"Failed to fetch video analysis data: {e}")
             video_context = "\n\nUSER'S ANALYZED VIDEOS: Unable to fetch video data."
+        
+        print(f"[DIAGNOSTIC] Final video_context length: {len(video_context)} chars")
+        print(f"[DIAGNOSTIC] Video context preview: {video_context[:200]}...")
         
         # Create enhanced system prompt with video analysis context
         system_prompt = f"""You are a helpful video analysis assistant for a video processing platform. 
@@ -413,6 +440,13 @@ If they have no analyzed videos, explain they need to upload and analyze videos 
         # Call Bedrock with timeout protection
         import asyncio
         try:
+            # Get timeout from environment variable, default to 25 seconds
+            bedrock_timeout = float(os.getenv('BEDROCK_TIMEOUT', '25.0'))
+            
+            print(f"[DIAGNOSTIC] Calling Bedrock with {len(video_context)} chars of video context")
+            print(f"[DIAGNOSTIC] Message: {message[:100]}...")
+            print(f"[DIAGNOSTIC] Using timeout: {bedrock_timeout} seconds")
+            
             response = await asyncio.wait_for(
                 asyncio.to_thread(
                     bedrock.invoke_model,
@@ -420,10 +454,13 @@ If they have no analyzed videos, explain they need to upload and analyze videos 
                     body=json.dumps(request_body),
                     contentType="application/json"
                 ),
-                timeout=10.0  # Reduced to 10 second timeout for faster response
+                timeout=bedrock_timeout  # Configurable timeout via environment variable
             )
+            print(f"[DIAGNOSTIC] Bedrock responded successfully")
         except asyncio.TimeoutError:
-            logger.error("Bedrock request timeout after 10 seconds")
+            bedrock_timeout = float(os.getenv('BEDROCK_TIMEOUT', '25.0'))
+            logger.error(f"Bedrock request timeout after {bedrock_timeout} seconds")
+            print(f"[DIAGNOSTIC] TIMEOUT after {bedrock_timeout}s - video_context length: {len(video_context)}")
             # Intelligent fallback based on message content
             message_lower = message.lower()
             if any(word in message_lower for word in ['video', 'videos', 'autos', 'cars', 'analyse']):
@@ -746,30 +783,20 @@ async def chat_with_videos(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
-    Chat with AI about video content using semantic search
+    Chat with AI about video content using integrated video analysis
     """
-    if not VECTOR_DB_AVAILABLE:
-        raise HTTPException(
-            status_code=503, 
-            detail="Vector database and chatbot features are not available. Please install requirements: pip install chromadb sentence-transformers anthropic"
-        )
-    
     try:
-        if USE_COST_OPTIMIZED:
-            chatbot = get_cost_optimized_chatbot()
-        elif USE_AWS_NATIVE:
-            chatbot = get_aws_chatbot()
-        else:
-            chatbot = get_chatbot()
+        # Use our integrated Bedrock ChatBot with video analysis
+        user_id = current_user.get("sub", "anonymous")
+        response_text = await call_bedrock_chatbot(request.message, user_id)
         
-        result = chatbot.chat(request.message, request.context_limit)
-        
+        # For now, return empty matched_videos since we're using integrated analysis
         return ChatResponse(
-            response=result["response"],
-            matched_videos=result["matched_videos"],
-            context_used=result["context_used"],
-            query=result["query"],
-            timestamp=result["timestamp"]
+            response=response_text,
+            matched_videos=[],
+            context_used=1 if "analyzed videos" in response_text.lower() else 0,
+            query=request.message,
+            timestamp=time.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         )
         
     except Exception as e:
