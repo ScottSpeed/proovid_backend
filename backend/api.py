@@ -567,14 +567,14 @@ async def root():
 async def health():
     return {"status": "ok"}
 
-# CORS preflight for /ask
+# CORS preflight for /ask (supports both GET and POST)
 @app.options("/ask")
 async def options_ask(request: Request):
     return Response(
         status_code=200,
         headers={
             "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
-            "Access-Control-Allow-Methods": "POST,OPTIONS",
+            "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
             "Access-Control-Allow-Headers": request.headers.get(
                 "access-control-request-headers", "*"
             ),
@@ -604,18 +604,39 @@ async def ask_agent(
 @app.get("/ask")
 async def ask_agent_get(
     message: str = Query(..., description="Message to ask the agent"),
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    request: Request = None
 ):
     try:
         # Direct AWS Bedrock ChatBot implementation with video context
         user_id = current_user.get("user_id", "unknown")
         response = await call_bedrock_chatbot(message, user_id)
-        return {"response": str(response)}
+        
+        # Return response with explicit CORS headers
+        return Response(
+            content=json.dumps({"response": str(response)}),
+            media_type="application/json",
+            headers={
+                "Access-Control-Allow-Origin": request.headers.get("origin", "*") if request else "*",
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+            }
+        )
     except Exception as e:
         logger.exception("bedrock chatbot error")
         # Fallback to placeholder if Bedrock fails
         response = f"🚧 ChatBot temporarily unavailable. Meanwhile, you can use Blackframe Detection! Your question was: {message}"
-        return {"response": str(response)}
+        return Response(
+            content=json.dumps({"response": str(response)}),
+            media_type="application/json",
+            headers={
+                "Access-Control-Allow-Origin": request.headers.get("origin", "*") if request else "*",
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Allow-Methods": "GET,POST,OPTIONS", 
+                "Access-Control-Allow-Headers": "*",
+            }
+        )
 
 
 # --- S3 listing --- 
