@@ -2018,3 +2018,58 @@ def api_final_test():
 @app.get("/api/health-final")  
 def api_health_final():
     return {"status": "ok", "location": "end-of-file"}
+
+@app.get("/debug-vector-status")
+def debug_vector_status():
+    """Debug endpoint to check Vector DB availability"""
+    try:
+        return {
+            "COST_OPTIMIZED_AWS_AVAILABLE": COST_OPTIMIZED_AWS_AVAILABLE,
+            "PREMIUM_AWS_VECTOR_DB_AVAILABLE": PREMIUM_AWS_VECTOR_DB_AVAILABLE,
+            "LOCAL_VECTOR_DB_AVAILABLE": LOCAL_VECTOR_DB_AVAILABLE,
+            "VECTOR_DB_AVAILABLE": VECTOR_DB_AVAILABLE,
+            "USE_COST_OPTIMIZED": USE_COST_OPTIMIZED,
+            "USE_AWS_NATIVE": USE_AWS_NATIVE,
+            "imports_working": True
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "imports_working": False,
+            "fallback_mode": True
+        }
+
+@app.get("/debug-vector-test")  
+def debug_vector_test():
+    """Test Vector DB initialization"""
+    try:
+        if VECTOR_DB_AVAILABLE:
+            from cost_optimized_aws_vector import CostOptimizedAWSVectorDB, CostOptimizedChatBot
+            
+            # Try to initialize
+            vector_db = CostOptimizedAWSVectorDB(
+                table_name="proov_jobs",
+                s3_bucket="proovid-results"
+            )
+            
+            # Test search
+            results = vector_db.semantic_search("BMW", limit=3)
+            
+            return {
+                "vector_db_initialized": True,
+                "search_results_count": len(results),
+                "sample_results": results[:2] if results else [],
+                "status": "SUCCESS"
+            }
+        else:
+            return {
+                "vector_db_initialized": False,
+                "reason": "VECTOR_DB_AVAILABLE = False",
+                "status": "FAILED"
+            }
+    except Exception as e:
+        return {
+            "vector_db_initialized": False,
+            "error": str(e),
+            "status": "ERROR"
+        }
