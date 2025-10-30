@@ -301,17 +301,74 @@ app.add_middleware(
 # --- Direct AWS Bedrock ChatBot Implementation ---
 async def smart_rag_search(query: str) -> str:
     """
-    PROFESSIONAL RAG APPROACH: Search video analysis data intelligently.
-    Returns direct results without Bedrock for instant responses!
+    PROFESSIONAL VECTOR DATABASE RAG SEARCH
+    Uses existing cost-optimized AWS Vector DB with semantic search
     """
     try:
-        print(f"[DIAGNOSTIC] Smart RAG search for: {query}")
+        print(f"[VECTOR-RAG] Semantic search for: {query}")
         
-        # Query processing
+        # Initialize Vector Database
+        if VECTOR_DB_AVAILABLE:
+            from cost_optimized_aws_vector import CostOptimizedAWSVectorDB, CostOptimizedChatBot
+            
+            # Use existing vector infrastructure
+            vector_db = CostOptimizedAWSVectorDB(
+                table_name="proov_jobs",
+                s3_bucket="proovid-results"
+            )
+            
+            # Initialize professional chatbot with vector search
+            chatbot = CostOptimizedChatBot(vector_db)
+            
+            # Perform semantic search with context
+            chat_response = chatbot.chat(query, context_limit=5)
+            
+            # Extract response
+            response_text = chat_response.get("response", "")
+            matched_videos = chat_response.get("matched_videos", [])
+            from_cache = chat_response.get("from_cache", False)
+            
+            # Add debug info for development
+            if matched_videos:
+                debug_info = f"\n\n🔧 **Debug Info:**\n"
+                debug_info += f"• Vector search found {len(matched_videos)} matches\n"
+                debug_info += f"• Response cached: {from_cache}\n"
+                debug_info += f"• Query processed by: Professional Vector DB\n"
+                
+                # Add video details
+                for i, video in enumerate(matched_videos[:3], 1):
+                    debug_info += f"• Video {i}: {video.get('job_id', 'Unknown')[:8]}... (Score: {video.get('similarity_score', 0):.2f})\n"
+                
+                response_text += debug_info
+            
+            print(f"[VECTOR-RAG] Found {len(matched_videos)} matches, cached: {from_cache}")
+            return response_text
+            
+        else:
+            # Fallback if vector DB not available
+            print(f"[VECTOR-RAG] Vector DB unavailable, using fallback")
+            return await basic_rag_fallback(query)
+            
+    except Exception as e:
+        logger.error(f"Vector RAG search error: {e}")
+        print(f"[VECTOR-RAG] Error: {e}, falling back to basic RAG")
+        return await basic_rag_fallback(query)
+
+
+async def basic_rag_fallback(query: str) -> str:
+    """
+    Fallback RAG search when Vector DB is unavailable
+    """
+    try:
+        print(f"[FALLBACK-RAG] Basic search for: {query}")
+        
+        # Query processing - EXTENDED for all video content
         query_lower = query.lower()
         is_bmw_query = 'bmw' in query_lower
         is_car_query = any(term in query_lower for term in ['car', 'auto', 'vehicle', 'fahrzeug'])
         is_text_query = any(term in query_lower for term in ['text', 'schrift', 'wort', 'buchstabe'])
+        is_person_query = any(term in query_lower for term in ['person', 'personen', 'menschen', 'leute', 'mann', 'frau', 'adult', 'male', 'female'])
+        is_general_query = any(term in query_lower for term in ['welche', 'was', 'zeigen', 'enthalten', 'content', 'inhalt'])
         
         # Get DynamoDB data
         t = job_table()
@@ -376,16 +433,37 @@ async def smart_rag_search(query: str) -> str:
                                     'timestamp': timestamp
                                 })
                     
-                    # RAG SCORING: Car/Vehicle labels
+                    # RAG SCORING: Labels (Cars, People, Objects)
                     if 'label_detection' in results and 'unique_labels' in results['label_detection']:
                         for label_item in results['label_detection']['unique_labels']:
                             label_name = label_item.get('name', '').lower()
                             confidence = label_item.get('max_confidence', 0)
                             
+                            # Car/Vehicle detection
                             if is_car_query and any(term in label_name for term in ['car', 'vehicle', 'auto']):
                                 relevance_score += confidence * 0.8
                                 matched_items.append({
                                     'type': 'CAR_LABEL',
+                                    'label': label_item.get('name'),
+                                    'confidence': confidence,
+                                    'categories': label_item.get('categories', [])
+                                })
+                            
+                            # Person detection
+                            elif is_person_query and any(term in label_name for term in ['person', 'adult', 'man', 'woman', 'male', 'female', 'face', 'head']):
+                                relevance_score += confidence * 1.0  # High score for person match
+                                matched_items.append({
+                                    'type': 'PERSON_LABEL',
+                                    'label': label_item.get('name'),
+                                    'confidence': confidence,
+                                    'categories': label_item.get('categories', [])
+                                })
+                            
+                            # General content detection
+                            elif is_general_query:
+                                relevance_score += confidence * 0.3  # Lower score for general content
+                                matched_items.append({
+                                    'type': 'GENERAL_LABEL',
                                     'label': label_item.get('name'),
                                     'confidence': confidence,
                                     'categories': label_item.get('categories', [])
@@ -400,13 +478,13 @@ async def smart_rag_search(query: str) -> str:
                         })
                         
                 except Exception as e:
-                    print(f"[DIAGNOSTIC] RAG parsing error for job {job_id}: {e}")
+                    print(f"[FALLBACK-RAG] Parsing error for job {job_id}: {e}")
                     continue
         
         # Sort by relevance
         relevant_results.sort(key=lambda x: x['score'], reverse=True)
         
-        print(f"[DIAGNOSTIC] RAG found {len(relevant_results)} relevant videos")
+        print(f"[FALLBACK-RAG] Found {len(relevant_results)} relevant videos")
         
         # Format intelligent response
         if not relevant_results:
@@ -415,7 +493,7 @@ async def smart_rag_search(query: str) -> str:
         if is_bmw_query:
             bmw_videos = [r for r in relevant_results if any(m['type'] == 'BMW_TEXT' for m in r['matches'])]
             if bmw_videos:
-                response = "🚗 **BMW Videos Found:**\n\n"
+                response = "🚗 **BMW Videos Found (Fallback Mode):**\n\n"
                 for i, video in enumerate(bmw_videos[:3], 1):
                     bmw_matches = [m for m in video['matches'] if m['type'] == 'BMW_TEXT']
                     response += f"📹 **{video['filename']}**\n"
@@ -425,7 +503,7 @@ async def smart_rag_search(query: str) -> str:
                 return response
         
         # General results
-        response = f"🎬 **Analysis Results ({len(relevant_results)} videos):**\n\n"
+        response = f"🎬 **Analysis Results (Fallback Mode - {len(relevant_results)} videos):**\n\n"
         for i, video in enumerate(relevant_results[:3], 1):
             response += f"{i}. **{video['filename']}**\n"
             for match in video['matches'][:2]:
@@ -440,7 +518,7 @@ async def smart_rag_search(query: str) -> str:
         return response
         
     except Exception as e:
-        logger.error(f"RAG search error: {e}")
+        logger.error(f"Fallback RAG search error: {e}")
         return "🤖 RAG search temporarily unavailable. Please try again!"
 
 
@@ -449,9 +527,13 @@ async def call_bedrock_chatbot(message: str, user_id: str = None) -> str:
     PROFESSIONAL SOLUTION: RAG-first approach with Bedrock fallback.
     Uses smart video analysis search for instant BMW/car queries!
     """
-    # 🔥 RAG-FIRST APPROACH: Check for BMW/car/analysis queries
+    # 🔥 RAG-FIRST APPROACH: Check for ANY video content queries
     message_lower = message.lower()
-    if any(term in message_lower for term in ['bmw', 'car', 'auto', 'vehicle', 'text', 'videos', 'analyse']):
+    rag_triggers = ['bmw', 'car', 'auto', 'vehicle', 'text', 'videos', 'analyse', 
+                   'personen', 'person', 'menschen', 'leute', 'mann', 'frau',
+                   'labels', 'objekte', 'inhalt', 'content', 'welche', 'was', 'wer',
+                   'enthalten', 'zeigen', 'detect', 'found', 'logo', 'emblem']
+    if any(term in message_lower for term in rag_triggers):
         print(f"[DIAGNOSTIC] RAG-first approach triggered for: {message}")
         rag_result = await smart_rag_search(message)
         if "No matches found" not in rag_result:
