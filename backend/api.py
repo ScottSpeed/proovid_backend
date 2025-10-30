@@ -2073,3 +2073,91 @@ def debug_vector_test():
             "error": str(e),
             "status": "ERROR"
         }
+
+@app.post("/migrate-to-vector-db")
+def migrate_to_vector_db():
+    """CRITICAL: Migrate existing DynamoDB jobs to Vector DB format"""
+    try:
+        if not VECTOR_DB_AVAILABLE:
+            return {"error": "Vector DB not available", "status": "FAILED"}
+        
+        from cost_optimized_aws_vector import CostOptimizedAWSVectorDB
+        
+        # Initialize Vector DB
+        vector_db = CostOptimizedAWSVectorDB(
+            table_name="proov_jobs",
+            s3_bucket="proovid-results"
+        )
+        
+        # Get all existing jobs from DynamoDB
+        t = job_table()
+        resp = t.scan()
+        jobs = resp.get("Items", [])
+        
+        migrated_count = 0
+        error_count = 0
+        
+        for job in jobs:
+            try:
+                # Extract job data
+                job_id_raw = job.get('job_id', {})
+                job_id = job_id_raw.get('S', job_id_raw) if isinstance(job_id_raw, dict) else str(job_id_raw)
+                
+                status_raw = job.get('status', {})
+                status = status_raw.get('S', status_raw) if isinstance(status_raw, dict) else str(status_raw)
+                
+                result_raw = job.get('result', {})
+                result = result_raw.get('S', result_raw) if isinstance(result_raw, dict) else result_raw
+                
+                if status == "done" and result:
+                    # Parse video info
+                    video_info_raw = job.get("video_info", job.get("video", {}))
+                    if isinstance(video_info_raw, dict) and 'M' in video_info_raw:
+                        video_info = {k: v.get('S', v) for k, v in video_info_raw['M'].items()}
+                    elif isinstance(video_info_raw, dict):
+                        video_info = video_info_raw
+                    else:
+                        video_info = {}
+                    
+                    s3_key = video_info.get('key', job.get('s3_key', {}).get('S', ''))
+                    
+                    # Parse analysis results
+                    if isinstance(result, str):
+                        analysis_results = json.loads(result)
+                    else:
+                        analysis_results = result
+                    
+                    # Create video metadata
+                    video_metadata = {
+                        "key": s3_key,
+                        "bucket": "proovid-results",
+                        "job_id": job_id
+                    }
+                    
+                    # Store in Vector DB format
+                    vector_db.store_video_analysis(job_id, video_metadata, analysis_results)
+                    migrated_count += 1
+                    
+            except Exception as e:
+                error_count += 1
+                logger.error(f"Migration error for job {job_id}: {e}")
+                continue
+        
+        # Test search after migration
+        test_results = vector_db.semantic_search("BMW", limit=3)
+        
+        return {
+            "status": "SUCCESS",
+            "migrated_jobs": migrated_count,
+            "errors": error_count,
+            "total_jobs_processed": len(jobs),
+            "test_search_results": len(test_results),
+            "sample_results": test_results[:2] if test_results else []
+        }
+        
+    except Exception as e:
+        return {
+            "status": "ERROR",
+            "error": str(e),
+            "migrated_jobs": 0
+        }
