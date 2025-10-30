@@ -301,21 +301,33 @@ app.add_middleware(
 # --- Direct AWS Bedrock ChatBot Implementation ---
 async def smart_rag_search(query: str) -> str:
     """
-    PROFESSIONAL VECTOR DATABASE RAG SEARCH
+    PROFESSIONAL VECTOR DATABASE RAG SEARCH - FORCE ENABLED!
     Uses existing cost-optimized AWS Vector DB with semantic search
     """
     try:
-        print(f"[VECTOR-RAG] Semantic search for: {query}")
+        print(f"[VECTOR-RAG] FORCE INIT semantic search for: {query}")
         
-        # Initialize Vector Database
-        if VECTOR_DB_AVAILABLE:
+        # FORCE Vector Database initialization - ignore availability flags
+        try:
             from cost_optimized_aws_vector import CostOptimizedAWSVectorDB, CostOptimizedChatBot
             
-            # Use existing vector infrastructure
+            # Force migrate existing data if needed
             vector_db = CostOptimizedAWSVectorDB(
                 table_name="proov_jobs",
                 s3_bucket="proovid-results"
             )
+            
+            # CHECK: Try a test search first to see if data exists
+            test_results = vector_db.semantic_search("BMW", limit=1)
+            
+            if not test_results:
+                print(f"[VECTOR-RAG] NO VECTOR DATA FOUND! Running emergency migration...")
+                # Emergency inline migration
+                await emergency_migrate_data(vector_db)
+                # Try search again
+                test_results = vector_db.semantic_search("BMW", limit=1)
+            
+            print(f"[VECTOR-RAG] Vector DB has {len(test_results)} BMW results")
             
             # Initialize professional chatbot with vector search
             chatbot = CostOptimizedChatBot(vector_db)
@@ -329,30 +341,97 @@ async def smart_rag_search(query: str) -> str:
             from_cache = chat_response.get("from_cache", False)
             
             # Add debug info for development
-            if matched_videos:
-                debug_info = f"\n\n🔧 **Debug Info:**\n"
-                debug_info += f"• Vector search found {len(matched_videos)} matches\n"
-                debug_info += f"• Response cached: {from_cache}\n"
-                debug_info += f"• Query processed by: Professional Vector DB\n"
-                
-                # Add video details
-                for i, video in enumerate(matched_videos[:3], 1):
-                    debug_info += f"• Video {i}: {video.get('job_id', 'Unknown')[:8]}... (Score: {video.get('similarity_score', 0):.2f})\n"
-                
-                response_text += debug_info
+            debug_info = f"\n\n� **PROFESSIONAL VECTOR DB:**\n"
+            debug_info += f"• Vector search found {len(matched_videos)} matches\n"
+            debug_info += f"• Response cached: {from_cache}\n"
+            debug_info += f"• Query processed by: Professional Vector DB (FORCE MODE)\n"
+            debug_info += f"• Test search results: {len(test_results)} BMW videos\n"
             
-            print(f"[VECTOR-RAG] Found {len(matched_videos)} matches, cached: {from_cache}")
+            # Add video details
+            for i, video in enumerate(matched_videos[:3], 1):
+                debug_info += f"• Video {i}: {video.get('job_id', 'Unknown')[:8]}... (Score: {video.get('similarity_score', 0):.2f})\n"
+            
+            response_text += debug_info
+            
+            print(f"[VECTOR-RAG] PROFESSIONAL MODE: Found {len(matched_videos)} matches, cached: {from_cache}")
             return response_text
             
-        else:
-            # Fallback if vector DB not available
-            print(f"[VECTOR-RAG] Vector DB unavailable, using fallback")
+        except Exception as vector_error:
+            print(f"[VECTOR-RAG] Vector DB failed: {vector_error}, using fallback")
             return await basic_rag_fallback(query)
             
     except Exception as e:
         logger.error(f"Vector RAG search error: {e}")
-        print(f"[VECTOR-RAG] Error: {e}, falling back to basic RAG")
+        print(f"[VECTOR-RAG] Total failure: {e}, falling back to basic RAG")
         return await basic_rag_fallback(query)
+
+
+async def emergency_migrate_data(vector_db):
+    """Emergency data migration for Vector DB"""
+    try:
+        print("[MIGRATION] Starting emergency Vector DB migration...")
+        
+        # Get all existing jobs from DynamoDB
+        t = job_table()
+        resp = t.scan(Limit=50)  # Limit for performance
+        jobs = resp.get("Items", [])
+        
+        migrated_count = 0
+        
+        for job in jobs[:10]:  # Only migrate first 10 jobs for speed
+            try:
+                # Extract job data
+                job_id_raw = job.get('job_id', {})
+                job_id = job_id_raw.get('S', job_id_raw) if isinstance(job_id_raw, dict) else str(job_id_raw)
+                
+                status_raw = job.get('status', {})
+                status = status_raw.get('S', status_raw) if isinstance(status_raw, dict) else str(status_raw)
+                
+                result_raw = job.get('result', {})
+                result = result_raw.get('S', result_raw) if isinstance(result_raw, dict) else result_raw
+                
+                if status == "done" and result:
+                    # Parse video info
+                    video_info_raw = job.get("video_info", job.get("video", {}))
+                    if isinstance(video_info_raw, dict) and 'M' in video_info_raw:
+                        video_info = {k: v.get('S', v) for k, v in video_info_raw['M'].items()}
+                    elif isinstance(video_info_raw, dict):
+                        video_info = video_info_raw
+                    else:
+                        video_info = {}
+                    
+                    s3_key = video_info.get('key', job.get('s3_key', {}).get('S', ''))
+                    
+                    # Parse analysis results
+                    if isinstance(result, str):
+                        analysis_results = json.loads(result)
+                    else:
+                        analysis_results = result
+                    
+                    # Create video metadata
+                    video_metadata = {
+                        "key": s3_key,
+                        "bucket": "proovid-results",
+                        "job_id": job_id
+                    }
+                    
+                    # Store in Vector DB format
+                    vector_db.store_video_analysis(job_id, video_metadata, analysis_results)
+                    migrated_count += 1
+                    print(f"[MIGRATION] Migrated job: {job_id}")
+                    
+                if migrated_count >= 10:
+                    break  # Limit migration for performance
+                    
+            except Exception as e:
+                print(f"[MIGRATION] Error migrating {job_id}: {e}")
+                continue
+        
+        print(f"[MIGRATION] Emergency migration completed: {migrated_count} jobs")
+        
+    except Exception as e:
+        print(f"[MIGRATION] Emergency migration failed: {e}")
+        # Continue anyway
 
 
 async def basic_rag_fallback(query: str) -> str:
