@@ -309,7 +309,9 @@ async def smart_rag_search(query: str) -> str:
         
         # FORCE Vector Database initialization - ignore availability flags
         try:
+            print(f"[DEBUG] Attempting to import Vector DB...")
             from cost_optimized_aws_vector import CostOptimizedAWSVectorDB, CostOptimizedChatBot
+            print(f"[DEBUG] Vector DB import successful!")
             
             # Force migrate existing data if needed
             vector_db = CostOptimizedAWSVectorDB(
@@ -358,7 +360,9 @@ async def smart_rag_search(query: str) -> str:
             
         except Exception as vector_error:
             print(f"[VECTOR-RAG] Vector DB failed: {vector_error}, using fallback")
-            return await basic_rag_fallback(query)
+            logger.error(f"CRITICAL VECTOR DB ERROR: {vector_error}")
+            # Return error info instead of fallback
+            return f"🚨 **VECTOR DB ERROR:** {str(vector_error)}\n\nFallback to basic RAG:\n" + await basic_rag_fallback(query)
             
     except Exception as e:
         logger.error(f"Vector RAG search error: {e}")
