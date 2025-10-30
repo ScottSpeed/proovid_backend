@@ -314,10 +314,7 @@ async def smart_rag_search(query: str) -> str:
             print(f"[DEBUG] Vector DB import successful!")
             
             # Force migrate existing data if needed
-            vector_db = CostOptimizedAWSVectorDB(
-                table_name="proov_jobs",
-                s3_bucket="proovid-results"
-            )
+            vector_db = CostOptimizedAWSVectorDB()
             
             # CHECK: Try a test search first to see if data exists
             test_results = vector_db.semantic_search("BMW", limit=1)
@@ -2130,10 +2127,7 @@ def debug_vector_test():
             from cost_optimized_aws_vector import CostOptimizedAWSVectorDB, CostOptimizedChatBot
             
             # Try to initialize
-            vector_db = CostOptimizedAWSVectorDB(
-                table_name="proov_jobs",
-                s3_bucket="proovid-results"
-            )
+            vector_db = CostOptimizedAWSVectorDB()
             
             # Test search
             results = vector_db.semantic_search("BMW", limit=3)
@@ -2167,10 +2161,7 @@ def migrate_to_vector_db():
         from cost_optimized_aws_vector import CostOptimizedAWSVectorDB
         
         # Initialize Vector DB
-        vector_db = CostOptimizedAWSVectorDB(
-            table_name="proov_jobs",
-            s3_bucket="proovid-results"
-        )
+        vector_db = CostOptimizedAWSVectorDB()
         
         # Get all existing jobs from DynamoDB
         t = job_table()
