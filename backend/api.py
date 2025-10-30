@@ -368,10 +368,11 @@ async def call_bedrock_chatbot(message: str, user_id: str = None) -> str:
                         s3_key_raw = job.get("s3_key", {})
                         s3_key = s3_key_raw.get('S', s3_key_raw) if isinstance(s3_key_raw, dict) else s3_key_raw
                         
-                        # Ensure video_info is a dict before calling .get()
+                        # EMERGENCY FIX: Ensure video_info is always a dict
                         if not isinstance(video_info, dict):
-                            print(f"[ERROR] video_info is not a dict: {type(video_info)} - {video_info}")
-                            video_info = {}
+                            print(f"[EMERGENCY DEBUG] video_info type: {type(video_info)} - converting to dict")
+                            print(f"[EMERGENCY DEBUG] video_info value: {video_info}")
+                            video_info = {}  # Reset to empty dict if not parseable
                         
                         video_name = video_info.get("filename", video_info.get("key", s3_key or "Unknown"))
                         labels = []
