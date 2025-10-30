@@ -325,9 +325,15 @@ async def call_bedrock_chatbot(message: str, user_id: str = None) -> str:
             completed_jobs = []
             for job in jobs:
                 # Extract values from DynamoDB format {"S": "value"} or direct value
-                job_id = job.get('job_id', {}).get('S', job.get('job_id', 'unknown'))
-                status = job.get('status', {}).get('S', job.get('status', ''))
-                result = job.get('result', {}).get('S', job.get('result', ''))
+                # EMERGENCY FIX: Handle DynamoDB string fields properly
+                job_id_raw = job.get('job_id', {})
+                job_id = job_id_raw.get('S', job_id_raw) if isinstance(job_id_raw, dict) else str(job_id_raw) if job_id_raw else 'unknown'
+                
+                status_raw = job.get('status', {})
+                status = status_raw.get('S', status_raw) if isinstance(status_raw, dict) else str(status_raw) if status_raw else ''
+                
+                result_raw = job.get('result', {})
+                result = result_raw.get('S', result_raw) if isinstance(result_raw, dict) else result_raw if result_raw else ''
                 
                 print(f"[DIAGNOSTIC] Job {job_id}: status='{status}', has_result={bool(result)}")
                 
@@ -364,9 +370,14 @@ async def call_bedrock_chatbot(message: str, user_id: str = None) -> str:
                         else:
                             results = result
                         
-                        # Extract key information for ChatBot
+                        # Extract key information for ChatBot - EMERGENCY FIX for s3_key parsing
                         s3_key_raw = job.get("s3_key", {})
-                        s3_key = s3_key_raw.get('S', s3_key_raw) if isinstance(s3_key_raw, dict) else s3_key_raw
+                        if isinstance(s3_key_raw, dict):
+                            s3_key = s3_key_raw.get('S', s3_key_raw)
+                        elif isinstance(s3_key_raw, str):
+                            s3_key = s3_key_raw  # Direct string value
+                        else:
+                            s3_key = str(s3_key_raw) if s3_key_raw else ""
                         
                         # EMERGENCY FIX: Ensure video_info is always a dict
                         if not isinstance(video_info, dict):

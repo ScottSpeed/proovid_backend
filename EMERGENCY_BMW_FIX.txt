@@ -1,0 +1,4 @@
+EMERGENCY BMW CHATBOT FIX - FORCE GITHUB ACTIONS BUILD
+Timestamp: 2025-10-30 00:16:00
+Fix: video_info parsing emergency safeguard
+Status: CRITICAL - USER WAITING
