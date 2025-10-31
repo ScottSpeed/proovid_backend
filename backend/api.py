@@ -93,32 +93,6 @@ async def get_current_user_info(current_user: Dict[str, Any] = Depends(get_curre
         is_active=current_user.get("is_active", True),
         created_at=current_user.get("created_at", "")
     )
-
-# TEMPORARY DEV-ONLY ENDPOINTS (without auth for quick testing)
-@app.get("/dev/test")
-async def dev_test():
-    """Development test endpoint without auth (REMOVE IN PRODUCTION!)"""
-    return {"status": "ok", "message": "API is working", "auth": "bypassed for dev"}
-
-@app.get("/dev/jobs")  
-async def dev_jobs():
-    """Development jobs endpoint without auth (REMOVE IN PRODUCTION!)"""
-    import boto3
-    from botocore.config import Config
-    
-    try:
-        # Query DynamoDB directly for dev
-        dynamodb = boto3.resource('dynamodb', region_name='eu-central-1', 
-                                config=Config(region_name='eu-central-1'))
-        table = dynamodb.Table('proov_jobs')
-        
-        response = table.scan(Limit=10)
-        jobs = response.get('Items', [])
-        
-        return {"jobs": jobs, "count": len(jobs), "dev_mode": True}
-    except Exception as e:
-        logger.error(f"Dev jobs error: {e}")
-        return {"error": str(e), "dev_mode": True}
     
     return {"message": "Password updated successfully"}
 
