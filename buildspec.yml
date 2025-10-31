@@ -21,38 +21,149 @@ phases:
       - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
       - export IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:-$(date +%s)}
       - echo "IMAGE_TAG=$IMAGE_TAG"
+      
+      # OPTIMIZATION: Detect which services changed
+      - echo "🔍 DETECTING CHANGED SERVICES..."
+      - |
+        if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+          # Get list of changed files since last commit
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+          echo "Changed files: $CHANGED_FILES"
+          
+          # Check which services need rebuilding
+          export BUILD_BACKEND=0
+          export BUILD_WORKER=0
+          export BUILD_FRONTEND=0
+          
+          if echo "$CHANGED_FILES" | grep -E "^backend/" | grep -v "^backend/worker/"; then
+            export BUILD_BACKEND=1
+            echo "✅ BACKEND changed - will build"
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -E "^backend/worker/|^backend/(requirements\.txt|config\.json|__init__\.py)"; then
+            export BUILD_WORKER=1
+            echo "✅ WORKER changed - will build"
+          fi
+          
+          if echo "$CHANGED_FILES" | grep -E "^frontend/"; then
+            export BUILD_FRONTEND=1
+            echo "✅ FRONTEND changed - will build"
+          fi
+          
+          # Build everything if infrastructure changes
+          if echo "$CHANGED_FILES" | grep -E "^(buildspec|infrastructure/)"; then
+            export BUILD_BACKEND=1
+            export BUILD_WORKER=1
+            export BUILD_FRONTEND=1
+            echo "🔄 INFRASTRUCTURE changed - building all services"
+          fi
+        else
+          # First commit or shallow clone - build everything
+          export BUILD_BACKEND=1
+          export BUILD_WORKER=1 
+          export BUILD_FRONTEND=1
+          echo "🚀 INITIAL BUILD - building all services"
+        fi
+        
+        echo "Build plan: BACKEND=$BUILD_BACKEND, WORKER=$BUILD_WORKER, FRONTEND=$BUILD_FRONTEND"
 
   build:
     commands:
-      - echo "Build backend image"
-      - docker build -t $ECR_REPO_BACKEND:latest backend/
-      - docker tag $ECR_REPO_BACKEND:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_BACKEND:$IMAGE_TAG
-      - echo "Build worker image"
-      - echo "Building worker image using backend/ as build context (so shared modules are included)"
-      - docker build -t $ECR_REPO_WORKER:latest -f backend/worker/Dockerfile backend/
-      - docker tag $ECR_REPO_WORKER:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:$IMAGE_TAG
-      - echo "Build frontend image"
-      - docker build -t $ECR_REPO_FRONTEND:latest frontend/
-      - docker tag $ECR_REPO_FRONTEND:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:$IMAGE_TAG
+      - echo "🚀 OPTIMIZED PARALLEL BUILDS STARTING..."
+      
+      # Pull latest images for layer caching
+      - |
+        echo "📥 PULLING LATEST IMAGES FOR CACHE..."
+        docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_BACKEND:latest || echo "No backend cache available"
+        docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:latest || echo "No worker cache available"  
+        docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:latest || echo "No frontend cache available"
+      
+      # PARALLEL BUILDS with caching
+      - |
+        if [ "$BUILD_BACKEND" = "1" ]; then
+          echo "🔨 Building BACKEND with cache..."
+          docker build \
+            --cache-from $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_BACKEND:latest \
+            -t $ECR_REPO_BACKEND:latest \
+            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_BACKEND:$IMAGE_TAG \
+            backend/ &
+          BACKEND_PID=$!
+        else
+          echo "⏭️  SKIPPING BACKEND (no changes)"
+        fi
+        
+        if [ "$BUILD_WORKER" = "1" ]; then
+          echo "🔨 Building WORKER with cache..."
+          docker build \
+            --cache-from $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:latest \
+            -t $ECR_REPO_WORKER:latest \
+            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:$IMAGE_TAG \
+            -f backend/worker/Dockerfile backend/ &
+          WORKER_PID=$!
+        else
+          echo "⏭️  SKIPPING WORKER (no changes)"
+        fi
+        
+        if [ "$BUILD_FRONTEND" = "1" ]; then
+          echo "🔨 Building FRONTEND with cache..."
+          docker build \
+            --cache-from $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:latest \
+            -t $ECR_REPO_FRONTEND:latest \
+            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:$IMAGE_TAG \
+            frontend/ &
+          FRONTEND_PID=$!
+        else
+          echo "⏭️  SKIPPING FRONTEND (no changes)"
+        fi
+        
+        # Wait for all background builds to complete
+        echo "⏳ WAITING FOR PARALLEL BUILDS..."
+        [ -n "$BACKEND_PID" ] && wait $BACKEND_PID && echo "✅ BACKEND build complete"
+        [ -n "$WORKER_PID" ] && wait $WORKER_PID && echo "✅ WORKER build complete"  
+        [ -n "$FRONTEND_PID" ] && wait $FRONTEND_PID && echo "✅ FRONTEND build complete"
 
   post_build:
     commands:
-      - echo "Push images to ECR"
-      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_BACKEND:$IMAGE_TAG
-      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:$IMAGE_TAG
-      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:$IMAGE_TAG
-      - echo "Register new ECS task definitions and update services"
+      - echo "🚀 OPTIMIZED DEPLOYMENTS STARTING..."
+      
+      # PARALLEL PUSHES to ECR
+      - |
+        echo "📤 PUSHING IMAGES TO ECR..."
+        if [ "$BUILD_BACKEND" = "1" ]; then
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_BACKEND:$IMAGE_TAG &
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_BACKEND:latest &
+        fi
+        
+        if [ "$BUILD_WORKER" = "1" ]; then
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:$IMAGE_TAG &
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:latest &
+        fi
+        
+        if [ "$BUILD_FRONTEND" = "1" ]; then
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:$IMAGE_TAG &
+          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:latest &
+        fi
+        
+        # Wait for all pushes to complete
+        wait
+        echo "✅ ALL IMAGES PUSHED"
+      
+      # SMART ECS UPDATES (only update changed services)
+      - |
+        if [ "$BUILD_BACKEND" = "1" ]; then
+          echo "🔄 UPDATING BACKEND SERVICE..."
+          cp infrastructure/ecs-taskdef-backend.json /tmp/taskdef-backend.json
+          jq --arg img "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_BACKEND:$IMAGE_TAG" '.containerDefinitions[0].image = $img' /tmp/taskdef-backend.json > /tmp/taskdef-backend-2.json
+          aws ecs register-task-definition --cli-input-json file:///tmp/taskdef-backend-2.json
+          aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE_BACKEND --force-new-deployment
+        else
+          echo "⏭️  SKIPPING BACKEND SERVICE (no changes)"
+        fi
 
       - |
-        # Backend taskdef: replace image placeholder in template and register
-        cp infrastructure/ecs-taskdef-backend.json /tmp/taskdef-backend.json
-        jq --arg img "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_BACKEND:$IMAGE_TAG" '.containerDefinitions[0].image = $img' /tmp/taskdef-backend.json > /tmp/taskdef-backend-2.json
-        aws ecs register-task-definition --cli-input-json file:///tmp/taskdef-backend-2.json
-
-      - |
-        # Optional: upload per-key SSM parameters if enabled in CodeBuild env
-        if [ "${UPLOAD_SSM:-0}" = "1" ]; then
-          echo "Uploading per-key SSM parameters from backend/config.json"
+        # Optional SSM upload (only if backend changed)
+        if [ "${UPLOAD_SSM:-0}" = "1" ] && [ "$BUILD_BACKEND" = "1" ]; then
+          echo "📋 UPLOADING SSM PARAMETERS..."
           if [ -f backend/config.json ]; then
             OPENSEARCH_HOST=$(jq -r '.OPENSEARCH_HOST // empty' backend/config.json)
             OPENSEARCH_INDEX=$(jq -r '.OPENSEARCH_INDEX // empty' backend/config.json)
@@ -64,21 +175,21 @@ phases:
               aws ssm put-parameter --name "/proov/backend/OPENSEARCH_INDEX" --value "$OPENSEARCH_INDEX" --type SecureString --overwrite --region "$AWS_REGION"
               aws ssm put-parameter --name "/proov/worker/OPENSEARCH_INDEX" --value "$OPENSEARCH_INDEX" --type SecureString --overwrite --region "$AWS_REGION"
             fi
-          else
-            echo "backend/config.json not found; skipping SSM upload"
           fi
         fi
 
       - |
-        # Worker taskdef
-        cp infrastructure/ecs-taskdef-worker.json /tmp/taskdef-worker.json
-        jq --arg img "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:$IMAGE_TAG" '.containerDefinitions[0].image = $img' /tmp/taskdef-worker.json > /tmp/taskdef-worker-2.json
-        aws ecs register-task-definition --cli-input-json file:///tmp/taskdef-worker-2.json
-
-      - |
-        # Update services to force new deployment
-        aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE_BACKEND --force-new-deployment || true
-        aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE_WORKER --force-new-deployment || true
+        if [ "$BUILD_WORKER" = "1" ]; then
+          echo "🔄 UPDATING WORKER SERVICE..."
+          cp infrastructure/ecs-taskdef-worker.json /tmp/taskdef-worker.json
+          jq --arg img "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:$IMAGE_TAG" '.containerDefinitions[0].image = $img' /tmp/taskdef-worker-2.json > /tmp/taskdef-worker-2.json
+          aws ecs register-task-definition --cli-input-json file:///tmp/taskdef-worker-2.json
+          aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE_WORKER --force-new-deployment
+        else
+          echo "⏭️  SKIPPING WORKER SERVICE (no changes)"
+        fi
+        
+      - echo "🎉 OPTIMIZED DEPLOYMENT COMPLETE!"
 
 artifacts:
   files:
