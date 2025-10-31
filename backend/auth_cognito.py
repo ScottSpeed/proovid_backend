@@ -37,9 +37,18 @@ def get_jwks():
     """Get JSON Web Key Set from Cognito"""
     global _jwks_cache
     if _jwks_cache is None:
-        response = requests.get(COGNITO_JWKS_URL)
-        response.raise_for_status()
-        _jwks_cache = response.json()
+        try:
+            logger.info("Fetching JWKS from Cognito...")
+            response = requests.get(COGNITO_JWKS_URL, timeout=5)
+            response.raise_for_status()
+            _jwks_cache = response.json()
+            logger.info("JWKS cache loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to fetch JWKS: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Authentication service unavailable: {e}"
+            )
     return _jwks_cache
 
 def get_signing_key(token):
