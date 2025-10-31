@@ -72,6 +72,7 @@ def get_signing_key(token):
 
 def verify_cognito_token(token: str) -> Dict[str, Any]:
     """Verify and decode Cognito JWT token"""
+    logger.info(f"JWT Verification attempt - Token length: {len(token)} chars")
     try:
         # Get the signing key
         signing_key = get_signing_key(token)
@@ -94,19 +95,21 @@ def verify_cognito_token(token: str) -> Dict[str, Any]:
         
         return payload
         
-    except jwt.ExpiredSignatureError:
+    except jwt.ExpiredSignatureError as e:
+        logger.error(f"JWT Token expired: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token expired"
         )
     except jwt.InvalidTokenError as e:
-        logger.error(f"Token validation error: {e}")
+        logger.error(f"JWT Token validation error: {e} | Token preview: {token[:50]}...")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token"
         )
     except Exception as e:
-        logger.error(f"Unexpected token validation error: {e}")
+        logger.error(f"JWT Unexpected token validation error: {e} | Token preview: {token[:50]}...")
+        logger.error(f"JWT Config - Client ID: {COGNITO_CLIENT_ID} | Issuer: {COGNITO_ISSUER}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token validation failed"
