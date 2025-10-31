@@ -6,7 +6,7 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
   define: {
-    // Use actual ALB endpoint (HTTP since no SSL cert on ALB)
-    'import.meta.env.VITE_API_URL': '"http://ui-proov-alb-1535367426.eu-central-1.elb.amazonaws.com"'
+    // Use CloudFront distribution for HTTPS (solves mixed content error!)
+    'import.meta.env.VITE_API_URL': '"https://d3blru1vbxsdqh.cloudfront.net"'
   }
 })
