@@ -368,56 +368,60 @@ async def emergency_migrate_data(vector_db):
     try:
         print("[MIGRATION] Starting emergency Vector DB migration...")
         
-        # Get all existing jobs from DynamoDB
-        t = job_table()
-        resp = t.scan(Limit=50)  # Limit for performance
+        # Use boto3 resource for better error handling
+        dynamodb = boto3.resource('dynamodb', region_name='eu-central-1')
+        table = dynamodb.Table('proov_jobs')
+        
+        # Scan for completed jobs with results
+        resp = table.scan(
+            FilterExpression="attribute_exists(#result) AND #status = :status",
+            ExpressionAttributeNames={"#result": "result", "#status": "status"},
+            ExpressionAttributeValues={":status": "done"},
+            Limit=15  # Increased limit for better migration
+        )
         jobs = resp.get("Items", [])
+        print(f"[MIGRATION] Found {len(jobs)} completed jobs to migrate")
         
         migrated_count = 0
         
-        for job in jobs[:10]:  # Only migrate first 10 jobs for speed
+        for job in jobs:  # Migrate all found jobs
             try:
-                # Extract job data
-                job_id_raw = job.get('job_id', {})
-                job_id = job_id_raw.get('S', job_id_raw) if isinstance(job_id_raw, dict) else str(job_id_raw)
+                # Job data is already in native Python format from boto3 resource  
+                job_id = str(job.get('job_id', ''))
+                status = str(job.get('status', ''))
+                result = job.get('result', '')
+                s3_key = job.get('s3_key', '')
+                s3_bucket = job.get('s3_bucket', 'proovid-results')
                 
-                status_raw = job.get('status', {})
-                status = status_raw.get('S', status_raw) if isinstance(status_raw, dict) else str(status_raw)
-                
-                result_raw = job.get('result', {})
-                result = result_raw.get('S', result_raw) if isinstance(result_raw, dict) else result_raw
-                
-                if status == "done" and result:
-                    # Parse video info
-                    video_info_raw = job.get("video_info", job.get("video", {}))
-                    if isinstance(video_info_raw, dict) and 'M' in video_info_raw:
-                        video_info = {k: v.get('S', v) for k, v in video_info_raw['M'].items()}
-                    elif isinstance(video_info_raw, dict):
-                        video_info = video_info_raw
-                    else:
-                        video_info = {}
-                    
-                    s3_key = video_info.get('key', job.get('s3_key', {}).get('S', ''))
-                    
+                if status == "done" and result and job_id and s3_key:
                     # Parse analysis results
                     if isinstance(result, str):
                         analysis_results = json.loads(result)
                     else:
                         analysis_results = result
                     
-                    # Create video metadata
+                    if not analysis_results:
+                        print(f"[MIGRATION] No analysis data for {job_id}, skipping")
+                        continue
+                    
+                    # Create video metadata  
                     video_metadata = {
                         "key": s3_key,
-                        "bucket": "proovid-results",
-                        "job_id": job_id
+                        "bucket": s3_bucket,
+                        "job_id": job_id,
+                        "filename": s3_key.split('/')[-1] if s3_key else "unknown.mp4"
                     }
                     
                     # Store in Vector DB format
                     vector_db.store_video_analysis(job_id, video_metadata, analysis_results)
                     migrated_count += 1
-                    print(f"[MIGRATION] Migrated job: {job_id}")
                     
-                if migrated_count >= 10:
+                    # Log migration with details
+                    labels_count = len(analysis_results.get('labels', []))
+                    text_count = len(analysis_results.get('text_detections', []))
+                    print(f"[MIGRATION] ✅ Migrated {job_id}: {labels_count} labels, {text_count} text detections")
+                    
+                if migrated_count >= 15:
                     break  # Limit migration for performance
                     
             except Exception as e:
