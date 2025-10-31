@@ -6,7 +6,7 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
   define: {
-    // Use CloudFront distribution for HTTPS (solves mixed content error!)
-    'import.meta.env.VITE_API_URL': '"https://d3blru1vbxsdqh.cloudfront.net"'
+    // Use direct HTTPS endpoint - cheaper than CloudFront, same functionality
+    'import.meta.env.VITE_API_URL': '"https://api.proovid.de"'
   }
 })
