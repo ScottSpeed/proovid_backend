@@ -13,6 +13,15 @@ import zipfile
 from decimal import Decimal
 from agent import rekognition_detect_text, detect_blackframes, analyze_video_complete, rekognition_detect_labels
 
+# Vector DB Integration
+try:
+    from cost_optimized_aws_vector import CostOptimizedAWSVectorDB
+    VECTOR_DB_AVAILABLE = True
+    print("[VECTOR-DB] Cost-optimized Vector DB module loaded successfully")
+except ImportError as e:
+    VECTOR_DB_AVAILABLE = False
+    print(f"[VECTOR-DB] Warning: Vector DB not available: {e}")
+
 DIRECT_MODE = True
 TEST_MODE = False
 
@@ -189,6 +198,20 @@ def get_sqs_client():
     )
     
     return boto3.client('sqs', region_name='eu-central-1', config=config)
+
+def get_vector_db():
+    """Get Vector DB instance for storing analysis results."""
+    if not VECTOR_DB_AVAILABLE:
+        logging.warning("Vector DB not available, skipping integration")
+        return None
+    
+    try:
+        vector_db = CostOptimizedAWSVectorDB()
+        logging.info("Vector DB initialized successfully")
+        return vector_db
+    except Exception as e:
+        logging.error(f"Failed to initialize Vector DB: {e}")
+        return None
 
 tools_map = {
     "analyze_video_complete": analyze_video_complete,
@@ -520,6 +543,28 @@ def _process_messages(messages):
                 logging.info("Video info: %s", json.dumps(video_info, indent=2))
                 logging.info("Final item keys: %s", list(item.keys()))
                 logging.info("==========================================")
+                
+                # Store in Vector DB for semantic search
+                try:
+                    vector_db = get_vector_db()
+                    if vector_db and analysis_data:
+                        video_metadata = {
+                            "key": video_info.get("key", ""),
+                            "bucket": video_info.get("bucket", ""),
+                            "job_id": job_id,
+                            "filename": video_info.get("filename", ""),
+                            "s3_url": video_info.get("s3_url", "")
+                        }
+                        
+                        vector_db.store_video_analysis(job_id, video_metadata, analysis_data)
+                        logging.info("✅ STORED IN VECTOR DB: Job %s with %d labels, %d text detections", 
+                                   job_id, 
+                                   len(analysis_data.get("labels", [])),
+                                   len(analysis_data.get("text_detections", [])))
+                    else:
+                        logging.warning("❌ Vector DB not available or no analysis data to store")
+                except Exception as e:
+                    logging.error("❌ Failed to store in Vector DB: %s", e)
                 
                 result_op, error = timeout_operation(
                     lambda: t.put_item(Item=item),
