@@ -17,11 +17,9 @@ import time
 from botocore.exceptions import ClientError
 import pathlib
 
-# Import auth bypass for debugging
-from auth_bypass import (
-    get_current_user, require_admin, require_user
-)
+# Import real Cognito authentication (SECURITY FIXED!)
 from auth_cognito import (
+    get_current_user, require_admin, require_user,
     LoginRequest, LoginResponse, UserResponse, ChangePasswordRequest
 )
 
@@ -316,15 +314,13 @@ async def smart_rag_search(query: str) -> str:
             # Force migrate existing data if needed
             vector_db = CostOptimizedAWSVectorDB()
             
-            # CHECK: Try a test search first to see if data exists
-            test_results = vector_db.semantic_search("BMW", limit=1)
+            # FORCE MIGRATION: Always run migration first time
+            print(f"[VECTOR-RAG] FORCE MIGRATION: Running data migration...")
+            await emergency_migrate_data(vector_db)
             
-            if not test_results:
-                print(f"[VECTOR-RAG] NO VECTOR DATA FOUND! Running emergency migration...")
-                # Emergency inline migration
-                await emergency_migrate_data(vector_db)
-                # Try search again
-                test_results = vector_db.semantic_search("BMW", limit=1)
+            # CHECK: Try search after migration
+            test_results = vector_db.semantic_search("BMW", limit=1)
+            print(f"[VECTOR-RAG] After migration: {len(test_results)} BMW results found")
             
             print(f"[VECTOR-RAG] Vector DB has {len(test_results)} BMW results")
             
