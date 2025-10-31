@@ -71,12 +71,12 @@ phases:
     commands:
       - echo "🚀 OPTIMIZED PARALLEL BUILDS STARTING..."
       
-      # Pull latest images for layer caching
+      # Pull latest images for layer caching (with timeout)
       - |
         echo "📥 PULLING LATEST IMAGES FOR CACHE..."
-        docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_BACKEND:latest || echo "No backend cache available"
-        docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:latest || echo "No worker cache available"  
-        docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:latest || echo "No frontend cache available"
+        timeout 60 docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_BACKEND:latest || echo "Backend cache unavailable or timeout"
+        timeout 60 docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:latest || echo "Worker cache unavailable or timeout"  
+        timeout 60 docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:latest || echo "Frontend cache unavailable or timeout"
       
       # PARALLEL BUILDS with caching
       - |
@@ -94,7 +94,7 @@ phases:
         
         if [ "$BUILD_WORKER" = "1" ]; then
           echo "🔨 Building WORKER with cache..."
-          docker build \
+          timeout 600 docker build \
             --cache-from $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:latest \
             -t $ECR_REPO_WORKER:latest \
             -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:$IMAGE_TAG \
