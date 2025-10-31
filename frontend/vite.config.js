@@ -6,7 +6,7 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
   define: {
-    // Emergency fix: Use .de domain (has valid SSL certificate)
-    'import.meta.env.VITE_API_URL': '"https://api.proovid.de"'
+    // Use actual ALB endpoint (HTTP since no SSL cert on ALB)
+    'import.meta.env.VITE_API_URL': '"http://ui-proov-alb-1535367426.eu-central-1.elb.amazonaws.com"'
   }
 })
