@@ -1,0 +1,130 @@
+name: 🔧 Setup AWS Infrastructure for Frontend
+
+on:
+  workflow_dispatch:  # Only manual trigger
+    inputs:
+      create_cloudfront:
+        description: 'Create CloudFront distribution?'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  setup-aws-infrastructure:
+    name: 🏗️ Setup S3 & CloudFront
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🔧 Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: 📦 Create S3 Bucket for Frontend Hosting
+        run: |
+          BUCKET_NAME="proovid-frontend-hosting"
+          REGION="eu-central-1"
+          
+          echo "📦 Creating S3 bucket: $BUCKET_NAME"
+          
+          # Create bucket (ignore error if already exists)
+          aws s3 mb s3://$BUCKET_NAME --region $REGION || echo "Bucket might already exist"
+          
+          # Configure static website hosting
+          aws s3 website s3://$BUCKET_NAME \
+            --index-document index.html \
+            --error-document index.html
+          
+          # Create bucket policy for public read access
+          cat > bucket-policy.json << 'EOF'
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "PublicReadGetObject",
+                "Effect": "Allow",
+                "Principal": "*",
+                "Action": "s3:GetObject",
+                "Resource": "arn:aws:s3:::proovid-frontend-hosting/*"
+              }
+            ]
+          }
+          EOF
+          
+          # Apply bucket policy
+          aws s3api put-bucket-policy --bucket $BUCKET_NAME --policy file://bucket-policy.json
+          
+          echo "✅ S3 bucket setup complete!"
+          echo "🌐 Website URL: http://$BUCKET_NAME.s3-website-$REGION.amazonaws.com"
+
+      - name: ☁️ Create CloudFront Distribution (Optional)
+        if: inputs.create_cloudfront == true
+        run: |
+          echo "☁️ Creating CloudFront distribution..."
+          
+          # Create CloudFront distribution config
+          cat > cloudfront-config.json << 'EOF'
+          {
+            "CallerReference": "proovid-frontend-$(date +%s)",
+            "Comment": "Proovid Frontend Distribution",
+            "DefaultCacheBehavior": {
+              "TargetOriginId": "S3-proovid-frontend-hosting",
+              "ViewerProtocolPolicy": "redirect-to-https",
+              "MinTTL": 0,
+              "ForwardedValues": {
+                "QueryString": false,
+                "Cookies": {
+                  "Forward": "none"
+                }
+              }
+            },
+            "Origins": {
+              "Quantity": 1,
+              "Items": [
+                {
+                  "Id": "S3-proovid-frontend-hosting",
+                  "DomainName": "proovid-frontend-hosting.s3-website-eu-central-1.amazonaws.com",
+                  "CustomOriginConfig": {
+                    "HTTPPort": 80,
+                    "HTTPSPort": 443,
+                    "OriginProtocolPolicy": "http-only"
+                  }
+                }
+              ]
+            },
+            "Enabled": true,
+            "DefaultRootObject": "index.html",
+            "PriceClass": "PriceClass_100"
+          }
+          EOF
+          
+          # Create distribution
+          DISTRIBUTION_ID=$(aws cloudfront create-distribution \
+            --distribution-config file://cloudfront-config.json \
+            --query 'Distribution.Id' \
+            --output text)
+          
+          echo "✅ CloudFront distribution created!"
+          echo "📋 Distribution ID: $DISTRIBUTION_ID"
+          echo "🔧 Add this to GitHub Secrets as CLOUDFRONT_DISTRIBUTION_ID"
+
+      - name: 🎉 Setup Summary
+        run: |
+          echo "## 🎉 AWS Infrastructure Setup Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Next Steps:" >> $GITHUB_STEP_SUMMARY
+          echo "1. **S3 Bucket:** proovid-frontend-hosting is ready" >> $GITHUB_STEP_SUMMARY
+          echo "2. **Website URL:** http://proovid-frontend-hosting.s3-website-eu-central-1.amazonaws.com" >> $GITHUB_STEP_SUMMARY
+          echo "3. **Deploy:** Push to master branch to automatically deploy frontend" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔐 Required GitHub Secrets:" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ AWS_ACCESS_KEY_ID (configured)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ AWS_SECRET_ACCESS_KEY (configured)" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.create_cloudfront }}" = "true" ]; then
+            echo "- ⚠️ CLOUDFRONT_DISTRIBUTION_ID (add from output above)" >> $GITHUB_STEP_SUMMARY
+          fi

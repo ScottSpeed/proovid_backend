@@ -1,0 +1,89 @@
+name: 🚀 Deploy Frontend to AWS S3
+
+on:
+  push:
+    branches: [ master ]
+    paths: 
+      - 'frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  deploy-frontend:
+    name: 🏗️ Build & Deploy Frontend
+    runs-on: ubuntu-latest
+    
+    # Only run if frontend files changed
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🏷️ Setup Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: 📦 Install Frontend Dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: 🧪 Run Frontend Lint
+        working-directory: ./frontend
+        run: npm run lint
+
+      - name: 🏗️ Build Frontend for Production
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: ✅ Verify Build Output
+        working-directory: ./frontend
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "❌ Build failed - dist directory not found!"
+            exit 1
+          fi
+          echo "✅ Build successful - dist directory created"
+          ls -la dist/
+
+      - name: 🔧 Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: 🚀 Deploy to S3 Bucket
+        working-directory: ./frontend
+        run: |
+          echo "🚀 Deploying frontend to S3..."
+          aws s3 sync dist/ s3://proovid-frontend-hosting --delete --quiet
+          echo "✅ Frontend deployed successfully!"
+
+      - name: 🔄 Invalidate CloudFront Cache (Optional)
+        if: vars.CLOUDFRONT_DISTRIBUTION_ID != ''
+        run: |
+          echo "🔄 Invalidating CloudFront cache..."
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*" \
+            --query 'Invalidation.Id' \
+            --output text
+          echo "✅ CloudFront cache invalidated!"
+
+      - name: 🎉 Deployment Summary
+        run: |
+          echo "## 🎉 Frontend Deployment Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Build Details:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **S3 Bucket:** proovid-frontend-hosting" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🌐 Access URLs:" >> $GITHUB_STEP_SUMMARY
+          echo "- **S3 Website:** http://proovid-frontend-hosting.s3-website-eu-central-1.amazonaws.com" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" ]; then
+            echo "- **CloudFront:** https://${{ vars.CLOUDFRONT_DOMAIN_NAME }}" >> $GITHUB_STEP_SUMMARY
+          fi
