@@ -134,14 +134,18 @@ class CostOptimizedAWSVectorDB:
             # Filter out common German question words and focus on content
             stopwords = {"welche", "videos", "enthalten", "zeig", "mir", "mit", "haben", "gibt", "das", "die", "der", "den", "eine", "einen", "text", "sind", "wie", "was", "wo", "wer", "wann", "warum"}
             
-            # German-English synonym mapping for better search
+            # German-English synonym mapping with plural/singular handling
             synonyms = {
                 "autos": ["car", "vehicle", "transportation", "automobile"],
                 "auto": ["car", "vehicle", "transportation"], 
+                "cars": ["car", "vehicle", "transportation", "automobile"],  # ADD PLURAL
+                "car": ["car", "vehicle", "transportation"],
                 "fahrzeug": ["car", "vehicle", "transportation"],
                 "fahrzeuge": ["car", "vehicle", "transportation"],
                 "personen": ["person", "people", "man", "woman", "human", "adult"],
                 "person": ["person", "people", "man", "woman", "human", "adult"],
+                "persons": ["person", "people", "man", "woman", "human", "adult"],  # ADD PLURAL
+                "people": ["person", "people", "man", "woman", "human", "adult"],
                 "leute": ["person", "people", "man", "woman", "human", "adult"],
                 "menschen": ["person", "people", "man", "woman", "human", "adult"],
                 "parfum": ["perfume", "fragrance", "cosmetics", "beauty"],
