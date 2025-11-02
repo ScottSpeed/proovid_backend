@@ -193,45 +193,52 @@ class CostOptimizedAWSVectorDB:
                     
                     conditions.append(f"contains(searchable_content, {attr_name})")
                 
-                if conditions:
-                    from boto3.dynamodb.conditions import Attr
-                    # Use simple attribute-based filtering
-                    filter_expr = None
-                    for keyword in query_keywords[:3]:  # Limit to 3 for performance
-                        condition = Attr('searchable_content').contains(keyword)
-                        if filter_expr is None:
-                            filter_expr = condition
-                        else:
-                            filter_expr = filter_expr | condition  # OR condition
-                    
-                    scan_params['FilterExpression'] = filter_expr
+            # Remove the broken FilterExpression - we filter in memory now
             
-            logger.info(f"DynamoDB scan params: {scan_params}")
-            response = self.table.scan(**scan_params)
+            # SIMPLE FIX: Scan ALL items and filter in memory (case-insensitive)
+            logger.info(f"Scanning all items and filtering in memory for case-insensitive search")
+            response = self.table.scan(Limit=100)
             items = response.get('Items', [])
-            logger.info(f"DynamoDB scan returned {len(items)} items")
+            logger.info(f"DynamoDB scan returned {len(items)} items, filtering for keywords: {query_keywords}")
             
-            # Rank results by keyword matches
+            # Filter items in memory (case-insensitive) and rank results
             scored_results = []
             for item in items:
-                score = self._calculate_match_score(item, query_keywords)
-                if score > 0:
-                    result = {
-                        "job_id": item.get("job_id", ""),
-                        "score": score,
-                        "metadata": {
-                            "video_key": item.get("s3_key", ""),
-                            "bucket": item.get("s3_bucket", ""),
-                            "semantic_tags": item.get("semantic_tags", []),
-                            "analysis_type": item.get("analysis_type", "unknown"),
-                            "has_labels": item.get("has_labels", False),
-                            "has_text": item.get("has_text", False),
-                            "has_blackframes": item.get("has_blackframes", False),
-                            "timestamp": item.get("search_updated_at", 0)
-                        },
-                        "document": item.get("searchable_content", "")
-                    }
-                    scored_results.append(result)
+                # Check if item matches any keyword (case-insensitive)
+                searchable_content = item.get("searchable_content", "").lower()
+                semantic_tags = item.get("semantic_tags", [])
+                
+                # Convert semantic_tags to lowercase for comparison
+                semantic_tags_lower = [tag.lower() if isinstance(tag, str) else str(tag).lower() for tag in semantic_tags]
+                
+                # Check if any keyword matches
+                has_match = False
+                for keyword in query_keywords:
+                    keyword_lower = keyword.lower()
+                    if (keyword_lower in searchable_content or 
+                        any(keyword_lower in tag for tag in semantic_tags_lower)):
+                        has_match = True
+                        break
+                
+                if has_match:
+                    score = self._calculate_match_score(item, query_keywords)
+                    if score > 0:
+                        result = {
+                            "job_id": item.get("job_id", ""),
+                            "score": score,
+                            "metadata": {
+                                "video_key": item.get("s3_key", ""),
+                                "bucket": item.get("s3_bucket", ""),
+                                "semantic_tags": item.get("semantic_tags", []),
+                                "analysis_type": item.get("analysis_type", "unknown"),
+                                "has_labels": item.get("has_labels", False),
+                                "has_text": item.get("has_text", False),
+                                "has_blackframes": item.get("has_blackframes", False),
+                                "timestamp": item.get("search_updated_at", 0)
+                            },
+                            "document": item.get("searchable_content", "")
+                        }
+                        scored_results.append(result)
             
             # Sort by score and return top results
             scored_results.sort(key=lambda x: x["score"], reverse=True)
