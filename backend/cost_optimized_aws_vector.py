@@ -134,10 +134,39 @@ class CostOptimizedAWSVectorDB:
             # Filter out common German question words and focus on content
             stopwords = {"welche", "videos", "enthalten", "zeig", "mir", "mit", "haben", "gibt", "das", "die", "der", "den", "eine", "einen", "text", "sind", "wie", "was", "wo", "wer", "wann", "warum"}
             
+            # German-English synonym mapping for better search
+            synonyms = {
+                "autos": ["car", "vehicle", "transportation", "automobile"],
+                "auto": ["car", "vehicle", "transportation"], 
+                "fahrzeug": ["car", "vehicle", "transportation"],
+                "fahrzeuge": ["car", "vehicle", "transportation"],
+                "personen": ["person", "people", "man", "woman", "human", "adult"],
+                "person": ["person", "people", "man", "woman", "human", "adult"],
+                "leute": ["person", "people", "man", "woman", "human", "adult"],
+                "menschen": ["person", "people", "man", "woman", "human", "adult"],
+                "parfum": ["perfume", "fragrance", "cosmetics", "beauty"],
+                "parfüm": ["perfume", "fragrance", "cosmetics", "beauty"],
+                "sport": ["sports", "athletic", "fitness"],
+                "straße": ["road", "street", "highway", "freeway"],
+                "strasse": ["road", "street", "highway", "freeway"],
+                "gebäude": ["building", "architecture", "structure"],
+                "haus": ["building", "house", "architecture"],
+                "natur": ["nature", "outdoors", "landscape"],
+                "wasser": ["water", "aquatic", "liquid"],
+                "tier": ["animal", "pet", "creature"],
+                "tiere": ["animal", "pet", "creature"],
+                "kleidung": ["clothing", "coat", "apparel"],
+                "logo": ["logo", "emblem", "symbol", "brand"],
+                "text": ["text", "writing", "license plate"]
+            }
+            
             query_keywords = []
             for word in query_words:
                 if len(word) > 2 and word not in stopwords:
                     query_keywords.append(word)
+                    # Add synonyms for better matching
+                    if word in synonyms:
+                        query_keywords.extend(synonyms[word])
             
             # If no meaningful keywords left, fall back to all words > 2 chars  
             if not query_keywords:
