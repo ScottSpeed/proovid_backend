@@ -128,10 +128,23 @@ class CostOptimizedAWSVectorDB:
         No embeddings needed - pure keyword/text matching
         """
         try:
+            # Smart query processing - extract meaningful search terms
             query_words = query.lower().split()
-            query_keywords = [word for word in query_words if len(word) > 2]
             
-            logger.info(f"Searching for keywords: {query_keywords}")
+            # Filter out common German question words and focus on content
+            stopwords = {"welche", "videos", "enthalten", "zeig", "mir", "mit", "haben", "gibt", "das", "die", "der", "den", "eine", "einen", "text", "sind", "wie", "was", "wo", "wer", "wann", "warum"}
+            
+            query_keywords = []
+            for word in query_words:
+                if len(word) > 2 and word not in stopwords:
+                    query_keywords.append(word)
+            
+            # If no meaningful keywords left, fall back to all words > 2 chars  
+            if not query_keywords:
+                query_keywords = [word for word in query_words if len(word) > 2]
+            
+            logger.info(f"Original query: '{query}'")
+            logger.info(f"Extracted keywords: {query_keywords}")
             
             # Scan DynamoDB for matching jobs
             scan_params = {
