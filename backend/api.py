@@ -336,10 +336,10 @@ async def smart_rag_search(query: str) -> str:
             from_cache = chat_response.get("from_cache", False)
             
             # Add debug info for development
-            debug_info = f"\n\n� **PROFESSIONAL VECTOR DB:**\n"
-            debug_info += f"• Vector search found {len(matched_videos)} matches\n"
+            debug_info = f"\n\n🎯 **PROFESSIONAL RAG CHATBOT:**\n"
+            debug_info += f"• Chatbot found {len(matched_videos)} matches\n"
             debug_info += f"• Response cached: {from_cache}\n"
-            debug_info += f"• Query processed by: Professional Vector DB (FORCE MODE)\n"
+            debug_info += f"• Query processed by: Professional Vector DB RAG\n"
             debug_info += f"• Test search results: {len(test_results)} BMW videos\n"
             
             # Add video details

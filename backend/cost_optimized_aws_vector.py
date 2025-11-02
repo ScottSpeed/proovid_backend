@@ -164,8 +164,10 @@ class CostOptimizedAWSVectorDB:
                     
                     scan_params['FilterExpression'] = filter_expr
             
+            logger.info(f"DynamoDB scan params: {scan_params}")
             response = self.table.scan(**scan_params)
             items = response.get('Items', [])
+            logger.info(f"DynamoDB scan returned {len(items)} items")
             
             # Rank results by keyword matches
             scored_results = []
@@ -280,7 +282,9 @@ class CostOptimizedChatBot:
                 return cached_response
             
             # Perform search
+            logger.info(f"[CHATBOT] Starting search for: '{user_query}' with limit: {context_limit}")
             search_results = self.vector_db.semantic_search(user_query, limit=context_limit)
+            logger.info(f"[CHATBOT] Search returned {len(search_results)} results")
             
             if not search_results:
                 response = {
