@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-// Backend API base URL - adjust according to your backend
+// Backend API base URL - proovid.ai domain configuration
 const API_BASE_URL = import.meta.env.PROD
-  ? 'https://your-backend-url.com/api' 
+  ? 'https://proovid.ai/api' 
   : 'http://localhost:8000/api';
 
 const api = axios.create({
@@ -34,7 +34,7 @@ api.interceptors.response.use(
 );
 
 export interface LoginCredentials {
-  email: string;
+  username: string;
   password: string;
 }
 

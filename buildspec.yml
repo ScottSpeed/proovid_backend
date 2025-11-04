@@ -12,6 +12,9 @@ env:
     ECS_SERVICE_WORKER: "worker-service"
     TASKDEF_FAMILY_BACKEND: "backend-task"
     TASKDEF_FAMILY_WORKER: "worker-task"
+    # Frontend S3 Configuration
+    S3_FRONTEND_BUCKET: "proovid-frontend-hosting"
+    CLOUDFRONT_DISTRIBUTION_ID: ""  # Add your CloudFront ID if available
 
 phases:
   pre_build:
@@ -73,10 +76,18 @@ phases:
       
       # Pull latest images for layer caching (with timeout)
       - |
-        echo "📥 PULLING LATEST IMAGES FOR CACHE..."
+        echo "� PULLING LATEST IMAGES FOR CACHE..."
         timeout 60 docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_BACKEND:latest || echo "Backend cache unavailable or timeout"
-        timeout 60 docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:latest || echo "Worker cache unavailable or timeout"  
-        timeout 60 docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:latest || echo "Frontend cache unavailable or timeout"
+        timeout 60 docker pull $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:latest || echo "Worker cache unavailable or timeout"
+        
+      # Frontend Node.js setup (only if frontend changed)
+      - |
+        if [ "$BUILD_FRONTEND" = "1" ]; then
+          echo "⚡ SETTING UP NODE.JS FOR FRONTEND..."
+          cd frontend
+          npm ci --cache .npm --prefer-offline
+          cd ..
+        fi
       
       # PARALLEL BUILDS with caching
       - |
@@ -105,13 +116,11 @@ phases:
         fi
         
         if [ "$BUILD_FRONTEND" = "1" ]; then
-          echo "🔨 Building FRONTEND with cache..."
-          docker build \
-            --cache-from $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:latest \
-            -t $ECR_REPO_FRONTEND:latest \
-            -t $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:$IMAGE_TAG \
-            frontend/ &
+          echo "🌟 Building FRONTEND with Vite..."
+          cd frontend
+          npm run build &
           FRONTEND_PID=$!
+          cd ..
         else
           echo "⏭️  SKIPPING FRONTEND (no changes)"
         fi
@@ -140,8 +149,18 @@ phases:
         fi
         
         if [ "$BUILD_FRONTEND" = "1" ]; then
-          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:$IMAGE_TAG &
-          docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_FRONTEND:latest &
+          echo "🚀 DEPLOYING FRONTEND TO S3..."
+          cd frontend
+          aws s3 sync dist/ s3://$S3_FRONTEND_BUCKET --delete --quiet
+          
+          # Invalidate CloudFront if configured
+          if [ -n "$CLOUDFRONT_DISTRIBUTION_ID" ] && [ "$CLOUDFRONT_DISTRIBUTION_ID" != "" ]; then
+            echo "🔄 Invalidating CloudFront cache..."
+            aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_DISTRIBUTION_ID --paths "/*" --query 'Invalidation.Id' --output text
+          fi
+          
+          echo "✅ FRONTEND deployed to: http://$S3_FRONTEND_BUCKET.s3-website-$AWS_REGION.amazonaws.com"
+          cd ..
         fi
         
         # Wait for all pushes to complete

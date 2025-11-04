@@ -4,7 +4,7 @@ REM 🚀 Windows PowerShell Deploy Script for Frontend
 echo 🏗️  Building and deploying frontend...
 
 REM Configuration
-set BUCKET_NAME=proovid-frontend-hosting
+set BUCKET_NAME=frontend-deploy-1756677679
 set CLOUDFRONT_DISTRIBUTION_ID=
 
 REM Build the frontend

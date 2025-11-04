@@ -13,7 +13,7 @@ const IntroAndLoginScreen: React.FC<IntroAndLoginScreenProps> = ({ onLoginSucces
   const [showUI, setShowUI] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [credentials, setCredentials] = useState<LoginCredentials>({
-    email: '',
+    username: '',
     password: '',
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -109,10 +109,10 @@ const IntroAndLoginScreen: React.FC<IntroAndLoginScreenProps> = ({ onLoginSucces
           {showUI && (
             <form onSubmit={handleSubmit} className="login-form fade-in">
               <input
-                type="email"
-                placeholder="Email"
-                value={credentials.email}
-                onChange={(e) => setCredentials({ ...credentials, email: e.target.value })}
+                type="text"
+                placeholder="Username"
+                value={credentials.username}
+                onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
                 onKeyPress={handleKeyPress}
                 className="form-input"
                 required

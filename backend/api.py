@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Query, Depends, APIRouter
+from fastapi import FastAPI, Request, BackgroundTasks, HTTPException, Query, Depends, APIRouter, status
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -83,6 +83,40 @@ async def startup_event():
 
 # --- Authentication Endpoints ---
 
+@app.post("/auth/login", response_model=LoginResponse)
+async def login(login_request: LoginRequest):
+    """Login with username and password via Cognito"""
+    try:
+        # Import cognito login function
+        from auth_cognito import authenticate_user
+        
+        # Authenticate with Cognito
+        auth_result = authenticate_user(login_request.username, login_request.password)
+        
+        if not auth_result:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials"
+            )
+        
+        return LoginResponse(
+            access_token=auth_result["access_token"],
+            user={
+                "username": login_request.username,
+                "email": auth_result.get("email", ""),
+                "role": "user"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Login failed"
+        )
+
 @app.get("/auth/me", response_model=UserResponse)
 async def get_current_user_info(current_user: Dict[str, Any] = Depends(get_current_user)):
     """Get current user information"""
@@ -93,8 +127,6 @@ async def get_current_user_info(current_user: Dict[str, Any] = Depends(get_curre
         is_active=current_user.get("is_active", True),
         created_at=current_user.get("created_at", "")
     )
-    
-    return {"message": "Password updated successfully"}
 
 
 # --- Configuration loader ---

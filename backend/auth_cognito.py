@@ -210,3 +210,35 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool
     created_at: Optional[str] = None
+
+
+def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
+    """Authenticate user with Cognito and return access token"""
+    try:
+        cognito_client = boto3.client('cognito-idp', config=boto3_config)
+        
+        response = cognito_client.admin_initiate_auth(
+            UserPoolId=COGNITO_USER_POOL_ID,
+            ClientId=COGNITO_CLIENT_ID,
+            AuthFlow='ADMIN_NO_SRP_AUTH',
+            AuthParameters={
+                'USERNAME': username,
+                'PASSWORD': password
+            }
+        )
+        
+        if 'AuthenticationResult' in response:
+            auth_result = response['AuthenticationResult']
+            return {
+                'access_token': auth_result['AccessToken'],
+                'id_token': auth_result.get('IdToken'),
+                'refresh_token': auth_result.get('RefreshToken'),
+                'email': username  # Assuming username is email
+            }
+        else:
+            logger.warning(f"Authentication failed for user: {username}")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Cognito authentication error: {e}")
+        return None
