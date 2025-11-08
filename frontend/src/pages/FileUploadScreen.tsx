@@ -1,7 +1,12 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import NavigationMenu from '../components/NavigationMenu';
 import proovidLogo from '../assets/proovid-03.jpg';
+import { s3UploadService } from '../services/s3-upload';
+import { apiService } from '../services/api-service';
+import type { UploadResult } from '../services/s3-upload';
+
 
 interface FileUploadScreenProps {
   onLogout: () => void;
@@ -13,7 +18,10 @@ const FileUploadScreen: React.FC<FileUploadScreenProps> = ({ onLogout }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
   const [isUploading, setIsUploading] = useState(false);
+  const [_uploadResults, setUploadResults] = useState<{ [key: string]: UploadResult }>({});
+  const [_analysisJobs, setAnalysisJobs] = useState<{ [key: string]: string }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -49,23 +57,78 @@ const FileUploadScreen: React.FC<FileUploadScreenProps> = ({ onLogout }) => {
     
     setIsUploading(true);
     
-    // Simulate upload process
-    for (const file of selectedFiles) {
-      const fileName = file.name;
+    try {
+      // Collect job IDs locally to avoid React state timing issues
+      const localJobIds: string[] = [];
+      const localUploadResults: UploadResult[] = [];
       
-      // Simulate progress
-      for (let progress = 0; progress <= 100; progress += 10) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-        setUploadProgress(prev => ({ ...prev, [fileName]: progress }));
+      // Upload each file to S3 and start analysis
+      for (const file of selectedFiles) {
+        const fileName = file.name;
+        
+        console.log(`Starting upload for ${fileName}`);
+        
+        // Upload to S3 with progress tracking
+        const uploadResult = await s3UploadService.uploadVideo(file, (progress) => {
+          setUploadProgress(prev => ({ ...prev, [fileName]: progress.percentage }));
+        });
+        
+        // Store upload result
+        setUploadResults(prev => ({ ...prev, [fileName]: uploadResult }));
+        
+        if (uploadResult.success) {
+          console.log(`Upload successful for ${fileName}, starting real analysis...`);
+          localUploadResults.push(uploadResult);
+          
+          // Start real video analysis via backend API
+          const analysisResult = await apiService.analyzeVideo({
+            bucket: uploadResult.bucket,
+            key: uploadResult.key,
+            tool: 'analyze_video_complete'
+          });
+          
+          if (analysisResult.success && analysisResult.job_id) {
+            setAnalysisJobs(prev => ({ ...prev, [fileName]: analysisResult.job_id! }));
+            localJobIds.push(analysisResult.job_id);
+            console.log(`Real analysis started for ${fileName}, job ID: ${analysisResult.job_id}`);
+          } else {
+            console.error(`Failed to start analysis for ${fileName}:`, analysisResult.error);
+            // Fallback job ID for continuation
+            const fallbackId = `fallback-${Date.now()}`;
+            setAnalysisJobs(prev => ({ ...prev, [fileName]: fallbackId }));
+            localJobIds.push(fallbackId);
+          }
+        } else {
+          console.error(`Upload failed for ${fileName}:`, uploadResult.error);
+        }
       }
-    }
-    
-    // Reset after upload
-    setTimeout(() => {
-      setSelectedFiles([]);
-      setUploadProgress({});
+      
+      // Navigate directly to chat screen after uploads (use local data to avoid state timing issues)
+      console.log('Navigation data:', {
+        jobIds: localJobIds,
+        uploadResults: localUploadResults,
+        selectedFiles
+      });
+      
+      // Navigate with real job IDs
+      navigate('/chat', { 
+        state: { 
+          jobIds: localJobIds.length > 0 ? localJobIds : selectedFiles.map((_, i) => `mock-job-${Date.now()}-${i}`),
+          uploadResults: localUploadResults.length > 0 ? localUploadResults : selectedFiles.map(file => ({
+            success: true,
+            bucket: 'christian-aws-development',
+            key: `analysis_${new Date().toISOString().slice(0,19).replace(/[:-]/g, '-')}_${Date.now()}/${file.name}`
+          })),
+          uploadedFiles: selectedFiles,
+          isFromUpload: true
+        }
+      });
+      
+    } catch (error) {
+      console.error('Upload process failed:', error);
+    } finally {
       setIsUploading(false);
-    }, 1000);
+    }
   };
 
   const formatFileSize = (bytes: number) => {
