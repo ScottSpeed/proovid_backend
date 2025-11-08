@@ -354,20 +354,29 @@ class CostOptimizedChatBot:
         )
         self.response_cache = {}  # Simple in-memory cache
     
-    def chat(self, user_query: str, context_limit: int = 5) -> Dict[str, Any]:
-        """Cost-optimized chat with caching and simplified responses"""
+    def chat(self, user_query: str, context_limit: int = 5, user_id: str = None, session_id: str = None) -> Dict[str, Any]:
+        """
+        Cost-optimized chat with caching and simplified responses
+        
+        Args:
+            user_query: User's search query
+            context_limit: Maximum number of videos to include in context
+            user_id: User ID for multi-tenant isolation (users only see their own videos)
+            session_id: Session ID for session-specific filtering
+        """
         try:
-            # Check cache first
-            query_hash = hashlib.md5(user_query.lower().encode()).hexdigest()
+            # Check cache first (cache per user!)
+            cache_key = f"{user_id or 'anonymous'}:{user_query.lower()}"
+            query_hash = hashlib.md5(cache_key.encode()).hexdigest()
             if query_hash in self.response_cache:
                 cached_response = self.response_cache[query_hash]
                 cached_response["from_cache"] = True
                 return cached_response
             
-            # Perform search
-            logger.info(f"[CHATBOT] Starting search for: '{user_query}' with limit: {context_limit}")
-            search_results = self.vector_db.semantic_search(user_query, limit=context_limit)
-            logger.info(f"[CHATBOT] Search returned {len(search_results)} results")
+            # 🔒 Perform search with user_id for multi-tenant isolation
+            logger.info(f"[CHATBOT] Starting search for: '{user_query}' with limit: {context_limit}, user_id: {user_id}")
+            search_results = self.vector_db.semantic_search(user_query, limit=context_limit, user_id=user_id, session_id=session_id)
+            logger.info(f"[CHATBOT] Search returned {len(search_results)} results for user {user_id}")
             
             if not search_results:
                 response = {
