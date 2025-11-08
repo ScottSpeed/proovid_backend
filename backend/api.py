@@ -245,7 +245,7 @@ def job_table():
     return _JOB_TABLE_OBJ
 
 
-def save_job_entry(job_id: str, status: str, result=None, video=None, created_at=None):
+def save_job_entry(job_id: str, status: str, result=None, video=None, created_at=None, user_id=None, user_email=None, session_id=None):
     t = job_table()
     current_time = int(time.time())  # Convert to integer
     
@@ -255,6 +255,14 @@ def save_job_entry(job_id: str, status: str, result=None, video=None, created_at
         "created_at": int(created_at) if created_at else current_time,  # Unix timestamp as integer
         "updated_at": current_time  # Also use integer timestamp here
     }
+    
+    # Add user isolation fields
+    if user_id:
+        item["user_id"] = user_id
+    if user_email:
+        item["user_email"] = user_email
+    if session_id:
+        item["session_id"] = session_id  # Links to first job in upload batch
     
     if result is not None:
         # store small results; large blobs should go to S3
@@ -1467,16 +1475,39 @@ async def analyze_videos(
     logger.info("=== ANALYZE REQUEST DEBUG ===")
     logger.info(f"Request: {request}")
     logger.info(f"Videos count: {len(request.videos)}")
+    logger.info(f"User: {current_user.get('email', 'unknown')}")
     for i, video in enumerate(request.videos):
         logger.info(f"Video {i}: bucket={video.bucket}, key={video.key}, tool={video.tool}")
     logger.info("===============================")
     
+    # Extract user info from Cognito token
+    user_id = current_user.get('sub') or current_user.get('username')  # Cognito user ID
+    user_email = current_user.get('email', 'unknown')
+    
+    # Session ID = first job ID (for upload batch grouping)
+    session_id = None
+    
     jobs: List[AnalyzeResponseJob] = []
-    for video in request.videos:
+    for i, video in enumerate(request.videos):
         job_id = str(uuid.uuid4())
-        logger.info(f"Creating job {job_id} with tool: {video.tool}")
-        # Save job entry to DynamoDB with correct status field
-        save_job_entry(job_id, "queued", video=video.dict())
+        
+        # First job becomes the session ID
+        if i == 0:
+            session_id = job_id
+            logger.info(f"Created new session: {session_id} for user {user_email}")
+        
+        logger.info(f"Creating job {job_id} (session: {session_id}) with tool: {video.tool}")
+        
+        # Save job entry with user and session info
+        save_job_entry(
+            job_id=job_id,
+            status="queued",
+            video=video.dict(),
+            user_id=user_id,
+            user_email=user_email,
+            session_id=session_id
+        )
+        
         # Use direct agent analysis for new label detection features
         if video.tool == "rekognition_detect_labels":
             background_tasks.add_task(
@@ -1488,14 +1519,21 @@ async def analyze_videos(
                 start_worker_container, video.bucket, video.key, job_id, video.tool
             )
         jobs.append(AnalyzeResponseJob(job_id=job_id, video=video))
+    
+    logger.info(f"Created {len(jobs)} jobs in session {session_id} for user {user_email}")
     return AnalyzeResponse(jobs=jobs)
 
 
 # --- Job status via search (avoid client.get with id, not supported in AOSS) ---
 @app.post("/job-status", response_model=JobStatusResponse)
-def job_status(request: JobStatusRequest):
-    # DynamoDB-backed job status lookup
+def job_status(
+    request: JobStatusRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    # DynamoDB-backed job status lookup with user verification
     t = job_table()
+    user_id = current_user.get('sub') or current_user.get('username')
+    
     statuses: List[JobStatusItem] = []
     for job_id in request.job_ids:
         try:
@@ -1504,6 +1542,14 @@ def job_status(request: JobStatusRequest):
             if not item:
                 statuses.append(JobStatusItem(job_id=job_id, status="not_found", result=""))
                 continue
+            
+            # User isolation: Only return jobs that belong to this user
+            job_user_id = item.get("user_id")
+            if job_user_id and job_user_id != user_id:
+                logger.warning(f"User {user_id} attempted to access job {job_id} owned by {job_user_id}")
+                statuses.append(JobStatusItem(job_id=job_id, status="not_found", result=""))
+                continue
+            
             result = item.get("result", "")
             # Prefer 'status' field, fallback to 'job_status' for legacy jobs
             status_value = item.get("status") or item.get("job_status", "unknown")
@@ -1558,6 +1604,151 @@ async def list_jobs(current_user: Dict[str, Any] = Depends(get_current_user)):
             
         out.append(job_entry)
     return out
+
+
+# --- NEW: User-specific job endpoints for multi-tenant isolation ---
+@app.get("/my-jobs")
+async def get_my_jobs(
+    limit: int = 50,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Get all jobs for the current user"""
+    t = job_table()
+    user_id = current_user.get('sub') or current_user.get('username')
+    user_email = current_user.get('email', 'unknown')
+    
+    try:
+        # Scan with filter (note: for production with many jobs, use GSI)
+        resp = t.scan(
+            FilterExpression="user_id = :uid",
+            ExpressionAttributeValues={':uid': user_id},
+            Limit=limit
+        )
+        items = resp.get("Items", [])
+        
+        logger.info(f"Found {len(items)} jobs for user {user_email}")
+        
+        # Format response
+        out = []
+        for it in items:
+            status_value = it.get("status") or it.get("job_status")
+            job_entry = {
+                "job_id": it.get("job_id"),
+                "status": status_value,
+                "session_id": it.get("session_id"),
+                "result": it.get("result"),
+                "created_at": it.get("created_at"),
+                "updated_at": it.get("updated_at"),
+                "video": it.get("video"),
+                "s3_key": it.get("s3_key")
+            }
+            out.append(job_entry)
+        
+        return {"jobs": out, "total": len(out), "user_email": user_email}
+        
+    except Exception as e:
+        logger.exception(f"get_my_jobs failed for user {user_id}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving jobs: {e}")
+
+
+@app.get("/my-sessions")
+async def get_my_sessions(
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Get all upload sessions for the current user (grouped by session_id)"""
+    t = job_table()
+    user_id = current_user.get('sub') or current_user.get('username')
+    
+    try:
+        # Get all user jobs
+        resp = t.scan(
+            FilterExpression="user_id = :uid",
+            ExpressionAttributeValues={':uid': user_id}
+        )
+        items = resp.get("Items", [])
+        
+        # Group by session_id
+        sessions = {}
+        for item in items:
+            session_id = item.get("session_id")
+            if not session_id:
+                continue
+            
+            if session_id not in sessions:
+                sessions[session_id] = {
+                    "session_id": session_id,
+                    "jobs": [],
+                    "total_jobs": 0,
+                    "completed_jobs": 0,
+                    "failed_jobs": 0,
+                    "created_at": item.get("created_at")
+                }
+            
+            status = item.get("status", "unknown")
+            sessions[session_id]["jobs"].append({
+                "job_id": item.get("job_id"),
+                "status": status,
+                "s3_key": item.get("s3_key")
+            })
+            sessions[session_id]["total_jobs"] += 1
+            
+            if status == "completed":
+                sessions[session_id]["completed_jobs"] += 1
+            elif status == "failed":
+                sessions[session_id]["failed_jobs"] += 1
+        
+        # Convert to list and sort by creation date
+        session_list = list(sessions.values())
+        session_list.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+        
+        return {"sessions": session_list, "total": len(session_list)}
+        
+    except Exception as e:
+        logger.exception(f"get_my_sessions failed for user {user_id}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving sessions: {e}")
+
+
+@app.get("/session/{session_id}/jobs")
+async def get_session_jobs(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Get all jobs for a specific session (with user verification)"""
+    t = job_table()
+    user_id = current_user.get('sub') or current_user.get('username')
+    
+    try:
+        # Get all jobs with this session_id
+        resp = t.scan(
+            FilterExpression="session_id = :sid",
+            ExpressionAttributeValues={':sid': session_id}
+        )
+        items = resp.get("Items", [])
+        
+        # Verify user owns this session
+        if items and items[0].get("user_id") != user_id:
+            logger.warning(f"User {user_id} attempted to access session {session_id}")
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Format response
+        jobs = []
+        for item in items:
+            jobs.append({
+                "job_id": item.get("job_id"),
+                "status": item.get("status"),
+                "result": item.get("result"),
+                "s3_key": item.get("s3_key"),
+                "created_at": item.get("created_at"),
+                "updated_at": item.get("updated_at")
+            })
+        
+        return {"session_id": session_id, "jobs": jobs, "total": len(jobs)}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"get_session_jobs failed for session {session_id}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving session jobs: {e}")
 
 
 @app.get("/jobs/{job_id}/results")
