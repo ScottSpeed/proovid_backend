@@ -145,7 +145,10 @@ async def get_upload_url(
     request: UploadURLRequest,
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    """Generate presigned URL for S3 upload"""
+    """
+    Generate presigned URL for direct S3 upload from frontend.
+    Returns URL valid for 15 minutes for secure client-side upload.
+    """
     try:
         s3_client = get_s3_client()
         
