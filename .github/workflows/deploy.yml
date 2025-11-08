@@ -1,8 +1,15 @@
-name: Deploy to AWS with Vector Search & AI ChatBot
+name: Deploy Backend & Worker to AWS ECS
+
+# NOTE: This workflow only deploys backend and worker containers
+# Frontend deployment is handled via local script: frontend/scripts/deploy-frontend.bat
+# This separation avoids GitHub Actions conflicts and allows faster frontend iteration
 
 on:
   push:
     branches: [ master ]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 env:
@@ -197,49 +204,6 @@ jobs:
 
         echo "✅ Worker Task Definition updated!"
 
-  deploy-frontend:
-    runs-on: ubuntu-latest
-    # PARALLEL DEPLOYMENT - läuft gleichzeitig mit Backend!
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: './frontend/package-lock.json'
-
-    - name: ⚡ ULTRA FAST NPM INSTALL & BUILD
-      working-directory: ./frontend
-      run: |
-        echo "⚡ SPEED MODE: Parallel install & build!"
-        npm ci --prefer-offline --no-audit --progress=false
-        npm run build --silent
-
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-
-    - name: Deploy to S3
-      working-directory: ./frontend
-      run: |
-        echo "☁️ Deploying to S3 bucket: frontend-deploy-1756677679"
-        aws s3 sync dist/ s3://frontend-deploy-1756677679 --delete --cache-control "max-age=31536000"
-        
-        # HTML files with shorter cache for updates
-        aws s3 cp dist/index.html s3://frontend-deploy-1756677679/index.html --cache-control "max-age=300"
-
-    - name: Invalidate CloudFront
-      run: |
-        echo "🔄 Invalidating CloudFront cache..."
-        aws cloudfront create-invalidation \
-          --distribution-id EP5ICKB8WIM46 \
-          --paths "/*"
-        
-        echo "✅ Frontend deployed successfully!"
-        echo "🌐 Available at: https://ui.proovid.de"
+  # NOTE: Frontend deployment is handled via local script (frontend/scripts/deploy-frontend.bat)
+  # This avoids GitHub Actions conflicts and allows faster iteration during development
+  # To deploy frontend: cd frontend && .\scripts\deploy-frontend.bat
