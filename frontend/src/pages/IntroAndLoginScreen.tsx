@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { authService, type LoginCredentials } from '../services/auth';
+import { authService, type LoginCredentials } from '../services/amplify-auth';
 import NavigationMenu from '../components/NavigationMenu';
 import proovidLogo from '../assets/proovid-03.jpg';
 
@@ -13,7 +13,7 @@ const IntroAndLoginScreen: React.FC<IntroAndLoginScreenProps> = ({ onLoginSucces
   const [showUI, setShowUI] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [credentials, setCredentials] = useState<LoginCredentials>({
-    username: '',
+    email: '',
     password: '',
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -109,10 +109,10 @@ const IntroAndLoginScreen: React.FC<IntroAndLoginScreenProps> = ({ onLoginSucces
           {showUI && (
             <form onSubmit={handleSubmit} className="login-form fade-in">
               <input
-                type="text"
-                placeholder="Username"
-                value={credentials.username}
-                onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
+                type="email"
+                placeholder="Email"
+                value={credentials.email}
+                onChange={(e) => setCredentials({ ...credentials, email: e.target.value })}
                 onKeyPress={handleKeyPress}
                 className="form-input"
                 required

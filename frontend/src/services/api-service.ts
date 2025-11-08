@@ -117,6 +117,12 @@ class ApiService {
   // Start video analysis
   async analyzeVideo(request: AnalyzeRequest): Promise<AnalyzeResponse> {
     try {
+      console.log('[API] Starting analyzeVideo request:', {
+        bucket: request.bucket,
+        key: request.key,
+        tool: request.tool
+      });
+
       const response = await this.apiCall<any>('/analyze', 'POST', {
         videos: [{
           bucket: request.bucket,
@@ -125,12 +131,19 @@ class ApiService {
         }]
       });
 
+      console.log('[API] analyzeVideo response:', response);
+      console.log('[API] Extracted job_id:', response.jobs?.[0]?.job_id);
+
       return {
         success: true,
         job_id: response.jobs?.[0]?.job_id,
         message: response.message || 'Analysis started successfully'
       };
     } catch (error) {
+      console.error('[API] analyzeVideo ERROR:', error);
+      console.error('[API] Error type:', error instanceof Error ? 'Error' : typeof error);
+      console.error('[API] Error message:', error instanceof Error ? error.message : String(error));
+      
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Analysis failed to start'

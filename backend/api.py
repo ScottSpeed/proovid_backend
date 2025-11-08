@@ -296,6 +296,11 @@ def job_table():
 
 
 def save_job_entry(job_id: str, status: str, result=None, video=None, created_at=None, user_id=None, user_email=None, session_id=None):
+    logger.info(f"[SAVE_JOB_DEBUG] Called with: job_id={job_id}")
+    logger.info(f"[SAVE_JOB_DEBUG] user_id = {repr(user_id)} (type: {type(user_id)})")
+    logger.info(f"[SAVE_JOB_DEBUG] user_email = {repr(user_email)} (type: {type(user_email)})")
+    logger.info(f"[SAVE_JOB_DEBUG] session_id = {repr(session_id)} (type: {type(session_id)})")
+    
     t = job_table()
     current_time = int(time.time())  # Convert to integer
     
@@ -309,10 +314,21 @@ def save_job_entry(job_id: str, status: str, result=None, video=None, created_at
     # Add user isolation fields
     if user_id:
         item["user_id"] = user_id
+        logger.info(f"[SAVE_JOB_DEBUG] ✅ Added user_id to DynamoDB item")
+    else:
+        logger.warning(f"[SAVE_JOB_DEBUG] ❌ Skipped user_id (falsy: {repr(user_id)})")
+        
     if user_email:
         item["user_email"] = user_email
+        logger.info(f"[SAVE_JOB_DEBUG] ✅ Added user_email to DynamoDB item")
+    else:
+        logger.warning(f"[SAVE_JOB_DEBUG] ❌ Skipped user_email (falsy: {repr(user_email)})")
+        
     if session_id:
         item["session_id"] = session_id  # Links to first job in upload batch
+        logger.info(f"[SAVE_JOB_DEBUG] ✅ Added session_id to DynamoDB item")
+    else:
+        logger.warning(f"[SAVE_JOB_DEBUG] ❌ Skipped session_id (falsy: {repr(session_id)})")
     
     if result is not None:
         # store small results; large blobs should go to S3
