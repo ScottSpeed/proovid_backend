@@ -60,7 +60,7 @@ class S3UploadService {
   
   async uploadVideo(
     file: File,
-    onProgress?: (progress: UploadProgress) => void
+    _onProgress?: (progress: UploadProgress) => void
   ): Promise<UploadResult> {
     try {
       // Validate file
