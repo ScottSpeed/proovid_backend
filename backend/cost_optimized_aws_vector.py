@@ -122,10 +122,16 @@ class CostOptimizedAWSVectorDB:
             logger.error(f"Failed to store video analysis: {e}")
             # Don't raise - this is optional functionality
     
-    def semantic_search(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def semantic_search(self, query: str, limit: int = 10, user_id: str = None, session_id: str = None) -> List[Dict[str, Any]]:
         """
         Cost-optimized search using DynamoDB scan with keyword matching
         No embeddings needed - pure keyword/text matching
+        
+        Args:
+            query: Search query
+            limit: Maximum results to return
+            user_id: Filter results by user_id (for multi-tenant isolation)
+            session_id: Filter results by session_id (for session-specific search)
         """
         try:
             # Smart query processing - extract meaningful search terms
@@ -220,6 +226,25 @@ class CostOptimizedAWSVectorDB:
                         filter_expr = condition
                     else:
                         filter_expr = filter_expr | condition  # OR all keywords
+                
+                # ========== CRITICAL: Multi-Tenant User Isolation ==========
+                # ALWAYS filter by user_id to ensure users only see their own videos
+                if user_id:
+                    user_filter = Attr('user_id').eq(user_id)
+                    if filter_expr is None:
+                        filter_expr = user_filter
+                    else:
+                        filter_expr = filter_expr & user_filter  # AND with user_id
+                    logger.info(f"🔒 Filtering search results by user_id: {user_id}")
+                
+                # Optional session-specific filtering
+                if session_id:
+                    session_filter = Attr('session_id').eq(session_id)
+                    if filter_expr is None:
+                        filter_expr = session_filter
+                    else:
+                        filter_expr = filter_expr & session_filter
+                    logger.info(f"🔒 Filtering search results by session_id: {session_id}")
                 
                 scan_params['FilterExpression'] = filter_expr
             

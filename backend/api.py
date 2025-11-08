@@ -403,13 +403,17 @@ app.add_middleware(
 # from worker.agent import agent  # Removed - agent framework was causing crashes
 
 # --- Direct AWS Bedrock ChatBot Implementation ---
-async def smart_rag_search(query: str) -> str:
+async def smart_rag_search(query: str, user_id: str = None) -> str:
     """
     PROFESSIONAL VECTOR DATABASE RAG SEARCH - FORCE ENABLED!
     Uses existing cost-optimized AWS Vector DB with semantic search
+    
+    Args:
+        query: User's search query
+        user_id: User ID for multi-tenant isolation (users only see their own videos)
     """
     try:
-        print(f"[VECTOR-RAG] FORCE INIT semantic search for: {query}")
+        print(f"[VECTOR-RAG] FORCE INIT semantic search for: {query} (user_id: {user_id})")
         
         # FORCE Vector Database initialization - ignore availability flags
         try:
@@ -424,17 +428,17 @@ async def smart_rag_search(query: str) -> str:
             print(f"[VECTOR-RAG] FORCE MIGRATION: Running data migration...")
             await emergency_migrate_data(vector_db)
             
-            # CHECK: Try search after migration
-            test_results = vector_db.semantic_search("BMW", limit=1)
-            print(f"[VECTOR-RAG] After migration: {len(test_results)} BMW results found")
+            # CHECK: Try search after migration (with user_id filter)
+            test_results = vector_db.semantic_search("BMW", limit=1, user_id=user_id)
+            print(f"[VECTOR-RAG] After migration: {len(test_results)} BMW results found for user {user_id}")
             
-            print(f"[VECTOR-RAG] Vector DB has {len(test_results)} BMW results")
+            print(f"[VECTOR-RAG] Vector DB has {len(test_results)} BMW results (filtered by user_id)")
             
             # Initialize professional chatbot with vector search
             chatbot = CostOptimizedChatBot(vector_db)
             
-            # Perform semantic search with context
-            chat_response = chatbot.chat(query, context_limit=5)
+            # 🔒 CRITICAL: Perform semantic search with user_id for multi-tenant isolation
+            chat_response = chatbot.chat(query, context_limit=5, user_id=user_id)
             
             # Extract response
             response_text = chat_response.get("response", "")
@@ -720,8 +724,8 @@ async def call_bedrock_chatbot(message: str, user_id: str = None) -> str:
                    'labels', 'objekte', 'inhalt', 'content', 'welche', 'was', 'wer',
                    'enthalten', 'zeigen', 'detect', 'found', 'logo', 'emblem']
     if any(term in message_lower for term in rag_triggers):
-        print(f"[DIAGNOSTIC] RAG-first approach triggered for: {message}")
-        rag_result = await smart_rag_search(message)
+        print(f"[DIAGNOSTIC] RAG-first approach triggered for: {message} (user_id: {user_id})")
+        rag_result = await smart_rag_search(message, user_id=user_id)
         if "No matches found" not in rag_result:
             print(f"[DIAGNOSTIC] RAG returned results, skipping Bedrock")
             return rag_result

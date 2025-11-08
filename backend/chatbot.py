@@ -81,20 +81,23 @@ class VideoRAGChatBot:
             logger.error(f"Failed to initialize Bedrock: {e}")
             raise
     
-    def chat(self, user_query: str, context_limit: int = 5) -> Dict[str, Any]:
+    def chat(self, user_query: str, context_limit: int = 5, user_id: str = None, session_id: str = None) -> Dict[str, Any]:
         """
         Process user query and return response with video recommendations
         
         Args:
             user_query: Natural language question about videos
             context_limit: Maximum number of videos to include in context
+            user_id: User ID for multi-tenant isolation (users only see their own videos)
+            session_id: Session ID for session-specific filtering
             
         Returns:
             Dict with response, matched videos, and metadata
         """
         try:
-            # Step 1: Perform vector search to find relevant videos
-            search_results = self.vector_db.semantic_search(user_query, limit=context_limit)
+            # Step 1: 🔒 Perform vector search with user_id for multi-tenant isolation
+            search_results = self.vector_db.semantic_search(user_query, limit=context_limit, user_id=user_id, session_id=session_id)
+            logger.info(f"🔒 Semantic search filtered by user_id={user_id}, session_id={session_id}")
             
             if not search_results:
                 return {
