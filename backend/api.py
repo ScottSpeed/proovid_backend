@@ -129,6 +129,53 @@ async def get_current_user_info(current_user: Dict[str, Any] = Depends(get_curre
     )
 
 
+# --- S3 Upload Presigned URL Endpoint ---
+class UploadURLRequest(BaseModel):
+    bucket: str
+    key: str
+    content_type: str
+
+class UploadURLResponse(BaseModel):
+    upload_url: str
+    bucket: str
+    key: str
+
+@app.post("/get-upload-url", response_model=UploadURLResponse)
+async def get_upload_url(
+    request: UploadURLRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Generate presigned URL for S3 upload"""
+    try:
+        s3_client = get_s3_client()
+        
+        # Generate presigned URL (valid for 15 minutes)
+        presigned_url = s3_client.generate_presigned_url(
+            'put_object',
+            Params={
+                'Bucket': request.bucket,
+                'Key': request.key,
+                'ContentType': request.content_type
+            },
+            ExpiresIn=900  # 15 minutes
+        )
+        
+        logger.info(f"Generated upload URL for user {current_user.get('email')}: s3://{request.bucket}/{request.key}")
+        
+        return UploadURLResponse(
+            upload_url=presigned_url,
+            bucket=request.bucket,
+            key=request.key
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to generate upload URL: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate upload URL: {str(e)}"
+        )
+
+
 # --- Configuration loader ---
 def load_config() -> dict:
     """Load configuration from a JSON file. File path can be overridden with CONFIG_FILE env var.
