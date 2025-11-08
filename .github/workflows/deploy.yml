@@ -37,18 +37,17 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
 
-    - name: � BACKEND BUILD - BUILDX MIT REGISTRY CACHE
+    - name: 🔥 BACKEND BUILD - NO CACHE (EMERGENCY FIX)
       working-directory: ./backend
       run: |
-        echo "� BACKEND BUILD - BUILDX MIT REGISTRY CACHE!"
+        echo "🔥 BACKEND BUILD - NO CACHE TO FIX STALE LAYERS!"
         
-        # Setup buildx with docker-container driver for cache support
+        # Setup buildx with docker-container driver
         docker buildx create --name builder --driver docker-container --use 2>/dev/null || docker buildx use builder
         
-        # Build with registry cache (works in GitHub Actions)
+        # Build WITHOUT cache to ensure fresh build with latest code
         docker buildx build \
-          --cache-from=type=registry,ref=$ECR_REGISTRY/backend:cache \
-          --cache-to=type=registry,ref=$ECR_REGISTRY/backend:cache,mode=max \
+          --no-cache \
           --push \
           --tag $ECR_REGISTRY/backend:latest \
           --platform linux/amd64 .
