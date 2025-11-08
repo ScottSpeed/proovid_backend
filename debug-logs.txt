@@ -1,0 +1,4 @@
+﻿2025-11-08T20:50:20 INFO:auth_cognito:JWT Verification attempt - Token length: 1024 chars
+2025-11-08T20:50:20 INFO:     10.0.0.52:44858 - "POST /job-status HTTP/1.1" 200 OK
+2025-11-08T20:50:35 INFO:     10.0.0.52:36670 - "GET / HTTP/1.1" 200 OK
+2025-11-08T20:50:35 INFO:     10.0.1.23:19758 - "GET / HTTP/1.1" 200 OK

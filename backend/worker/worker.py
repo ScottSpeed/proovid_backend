@@ -524,6 +524,14 @@ def _process_messages(messages):
                     "video": job_item.get("video"),  # Preserve original video field
                     "video_info": video_info
                 }
+                
+                # CRITICAL: Preserve user isolation fields for multi-tenant support
+                if job_item.get("user_id"):
+                    item["user_id"] = job_item["user_id"]
+                if job_item.get("user_email"):
+                    item["user_email"] = job_item["user_email"]
+                if job_item.get("session_id"):
+                    item["session_id"] = job_item["session_id"]
 
                 # Extract summary and other fields to the top level
                 summary = analysis_data.get("summary", {})
