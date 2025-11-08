@@ -314,21 +314,21 @@ def save_job_entry(job_id: str, status: str, result=None, video=None, created_at
     # Add user isolation fields
     if user_id:
         item["user_id"] = user_id
-        logger.info(f"[SAVE_JOB_DEBUG] ✅ Added user_id to DynamoDB item")
+        logger.info(f"[SAVE_JOB_DEBUG] ADDED user_id to DynamoDB item")
     else:
-        logger.warning(f"[SAVE_JOB_DEBUG] ❌ Skipped user_id (falsy: {repr(user_id)})")
+        logger.warning(f"[SAVE_JOB_DEBUG] SKIPPED user_id (falsy: {repr(user_id)})")
         
     if user_email:
         item["user_email"] = user_email
-        logger.info(f"[SAVE_JOB_DEBUG] ✅ Added user_email to DynamoDB item")
+        logger.info(f"[SAVE_JOB_DEBUG] ADDED user_email to DynamoDB item")
     else:
-        logger.warning(f"[SAVE_JOB_DEBUG] ❌ Skipped user_email (falsy: {repr(user_email)})")
+        logger.warning(f"[SAVE_JOB_DEBUG] SKIPPED user_email (falsy: {repr(user_email)})")
         
     if session_id:
         item["session_id"] = session_id  # Links to first job in upload batch
-        logger.info(f"[SAVE_JOB_DEBUG] ✅ Added session_id to DynamoDB item")
+        logger.info(f"[SAVE_JOB_DEBUG] ADDED session_id to DynamoDB item")
     else:
-        logger.warning(f"[SAVE_JOB_DEBUG] ❌ Skipped session_id (falsy: {repr(session_id)})")
+        logger.warning(f"[SAVE_JOB_DEBUG] SKIPPED session_id (falsy: {repr(session_id)})")
     
     if result is not None:
         # store small results; large blobs should go to S3
@@ -1541,6 +1541,8 @@ async def analyze_videos(
     logger.info("=== ANALYZE REQUEST DEBUG ===")
     logger.info(f"Request: {request}")
     logger.info(f"Videos count: {len(request.videos)}")
+    logger.info(f"current_user FULL DICT: {current_user}")
+    logger.info(f"current_user.keys(): {list(current_user.keys())}")
     logger.info(f"User: {current_user.get('email', 'unknown')}")
     for i, video in enumerate(request.videos):
         logger.info(f"Video {i}: bucket={video.bucket}, key={video.key}, tool={video.tool}")
@@ -1549,6 +1551,11 @@ async def analyze_videos(
     # Extract user info from Cognito token
     user_id = current_user.get('sub') or current_user.get('username')  # Cognito user ID
     user_email = current_user.get('email', 'unknown')
+    
+    logger.info(f"[USER_EXTRACT] user_id from get('sub'): {current_user.get('sub')}")
+    logger.info(f"[USER_EXTRACT] user_id from get('username'): {current_user.get('username')}")
+    logger.info(f"[USER_EXTRACT] FINAL user_id: {user_id}")
+    logger.info(f"[USER_EXTRACT] FINAL user_email: {user_email}")
     
     # Session ID = first job ID (for upload batch grouping)
     session_id = None
