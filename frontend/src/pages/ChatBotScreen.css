@@ -121,6 +121,8 @@
   flex: 1;
   overflow-y: auto;
   padding: 1rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .file-section-title {
@@ -208,6 +210,21 @@
 .file-item-job {
   font-family: monospace;
   color: #ff6b35;
+}
+
+/* File Explorer Info Text */
+.file-explorer-info {
+  margin-top: auto;
+  padding: 1rem;
+  border-top: 1px solid rgba(255, 107, 53, 0.2);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.info-text {
+  font-size: 0.75rem;
+  color: #a0a0a0;
+  line-height: 1.4;
+  margin: 0;
 }
 
 .chat-messages-container {

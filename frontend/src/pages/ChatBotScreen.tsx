@@ -411,6 +411,13 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                 </button>
               </div>
             )}
+            
+            {/* Info text at bottom */}
+            <div className="file-explorer-info">
+              <p className="info-text">
+                💡 Upload videos to analyze content, detect objects, extract text, and more.
+              </p>
+            </div>
           </div>
         </motion.div>
 
@@ -422,16 +429,14 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
         >
           {/* Chat Messages */}
           <div className="chat-messages-container">
-            {/* Large Logo in Center when only welcome message or empty */}
-            {messages.length <= 1 && !isTyping && (
-              <div className="center-logo-container">
-                <img 
-                  src={proovidLogo} 
-                  alt="Proovid AI" 
-                  className="center-logo"
-                />
-              </div>
-            )}
+            {/* Large Logo in Center - always visible */}
+            <div className="center-logo-container">
+              <img 
+                src={proovidLogo} 
+                alt="Proovid AI" 
+                className="center-logo"
+              />
+            </div>
             
             <div className="chat-messages">
             <AnimatePresence>
