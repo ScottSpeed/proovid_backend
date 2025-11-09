@@ -290,26 +290,26 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
           {isPanelOpen ? '←' : '→'}
         </motion.button>
 
-        {/* Left Panel - File Structure (Sliding) */}
+        {/* Left Panel - File Structure (Sliding) - Dark Theme */}
         <motion.div 
-          className="bg-white border-r border-gray-200 flex flex-col absolute left-0 top-0 h-full z-20 shadow-lg"
+          className="file-explorer-sidebar"
           initial={{ x: isPanelOpen ? 0 : -320, width: 320 }}
           animate={{ x: isPanelOpen ? 0 : -320, width: 320 }}
           transition={{ duration: 0.3, ease: "easeInOut" }}
         >
-          <div className="p-4 bg-gray-50 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Files & Analysis</h2>
-            <p className="text-sm text-gray-600 mt-1">
+          <div className="file-explorer-header">
+            <h2 className="file-explorer-title">📁 Files & Analysis</h2>
+            <p className="file-explorer-subtitle">
               {uploadedFiles.length > 0 ? `${uploadedFiles.length} files uploaded` : `${completedJobs.length} analysis completed`}
             </p>
           </div>
           
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="file-explorer-content">
             {/* Show uploaded files first */}
             {uploadedFiles.length > 0 && (
               <div className="mb-6">
-                <h3 className="font-medium text-gray-900 mb-3">Uploaded Files</h3>
-                <div className="space-y-2">
+                <h3 className="file-section-title">📂 Uploaded Files</h3>
+                <div className="file-list">
                   {uploadedFiles.map((file, index) => {
                     const jobId = jobIds[index];
                     const status = jobStatuses[jobId];
@@ -317,28 +317,23 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                     return (
                       <motion.div
                         key={`file-${index}`}
-                        className="bg-gray-50 rounded-lg p-3 border border-gray-200"
+                        className="file-item"
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.3, delay: index * 0.1 }}
                       >
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-medium text-gray-900 text-sm truncate">
-                            {file.name}
+                        <div className="file-item-header">
+                          <h4 className="file-item-name">
+                            🎬 {file.name}
                           </h4>
-                          <span className={`text-xs px-2 py-1 rounded ${
-                            status?.status === 'completed' ? 'bg-green-100 text-green-800' :
-                            status?.status === 'running' ? 'bg-yellow-100 text-yellow-800' :
-                            status?.status === 'failed' ? 'bg-red-100 text-red-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
+                          <span className={`file-status ${status?.status || 'pending'}`}>
                             {status?.status || 'pending'}
                           </span>
                         </div>
                         
-                        <div className="text-xs text-gray-600 space-y-1">
-                          <p><strong>Size:</strong> {Math.round(file.size / 1024 / 1024 * 100) / 100} MB</p>
-                          {jobId && <p><strong>Job ID:</strong> {jobId}</p>}
+                        <div className="file-item-details">
+                          <p>📦 {Math.round(file.size / 1024 / 1024 * 100) / 100} MB</p>
+                          {jobId && <p className="file-item-job">ID: {jobId.slice(0, 8)}...</p>}
                         </div>
 
                         {/* Progress indicator for running jobs */}
@@ -359,27 +354,27 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
             {/* Show completed analyses */}
             {completedJobs.length > 0 && (
               <div>
-                <h3 className="font-medium text-gray-900 mb-3">Completed Analyses</h3>
-                <div className="space-y-3">
+                <h3 className="file-section-title">✅ Completed Analyses</h3>
+                <div className="file-list">
                   {completedJobs.map((job, index) => (
                     <motion.div
                       key={job.job_id}
-                      className="bg-gray-50 rounded-lg p-3 border border-gray-200"
+                      className="file-item"
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ duration: 0.3, delay: index * 0.1 }}
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium text-gray-900 text-sm">
-                          Analysis {index + 1}
+                      <div className="file-item-header">
+                        <h4 className="file-item-name">
+                          📊 Analysis {index + 1}
                         </h4>
-                        <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">
-                          Completed
+                        <span className="file-status completed">
+                          Done
                         </span>
                       </div>
                       
-                      <div className="text-xs text-gray-600 space-y-1">
-                        <p><strong>Job ID:</strong> {job.job_id}</p>
+                      <div className="file-item-details">
+                        <p className="file-item-job">ID: {job.job_id.slice(0, 12)}...</p>
                         {uploadResults[index] && (
                           <>
                             <p><strong>Bucket:</strong> {uploadResults[index].bucket}</p>
