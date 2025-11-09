@@ -416,12 +416,12 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
 
         {/* Right Panel - Chat Interface */}
         <motion.div 
-          className="flex flex-col w-full"
+          className="flex flex-col w-full bg-gradient-to-b from-gray-50 to-white"
           style={{ paddingLeft: isPanelOpen ? '320px' : '0px' }}
           transition={{ duration: 0.3 }}
         >
           {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gradient-to-br from-purple-50/30 via-white to-blue-50/20">
             <AnimatePresence>
               {messages.map((message) => (
                 <motion.div
@@ -431,23 +431,38 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <div className={`max-w-3xl ${message.isBot ? 'mr-12' : 'ml-12'}`}>
-                    <div
-                      className={`rounded-lg px-4 py-3 shadow-sm ${
-                        message.isBot
-                          ? 'bg-white border border-gray-200'
-                          : 'bg-purple-600 text-white'
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                        {message.text}
-                      </p>
-                    </div>
-                    <p className={`text-xs text-gray-500 mt-1 ${
-                      message.isBot ? 'text-left' : 'text-right'
+                  <div className={`flex items-start gap-3 max-w-[70%] ${message.isBot ? 'flex-row' : 'flex-row-reverse'}`}>
+                    {/* Avatar */}
+                    <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold ${
+                      message.isBot ? 'bg-gradient-to-br from-purple-500 to-purple-700' : 'bg-gradient-to-br from-blue-500 to-blue-700'
                     }`}>
-                      {message.isBot ? 'Proovid AI' : 'You'} • {formatTime(message.timestamp)}
-                    </p>
+                      {message.isBot ? '🤖' : '👤'}
+                    </div>
+                    
+                    {/* Message Content */}
+                    <div className="flex-1">
+                      <div className={`rounded-2xl px-5 py-3 shadow-md ${
+                        message.isBot
+                          ? 'bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200'
+                          : 'bg-gradient-to-br from-purple-600 to-purple-700 text-white'
+                      }`}>
+                        <p className={`text-sm leading-relaxed ${
+                          message.isBot ? 'text-gray-800' : 'text-white'
+                        }`}>
+                          {/* Filter out debug information */}
+                          {message.text.split('🎯 **PROFESSIONAL RAG CHATBOT:**')[0].trim()}
+                        </p>
+                      </div>
+                      <div className={`flex items-center gap-2 mt-2 text-xs ${
+                        message.isBot ? 'justify-start' : 'justify-end'
+                      }`}>
+                        <span className="text-gray-500 font-medium">
+                          {message.isBot ? 'Proovid AI' : 'You'}
+                        </span>
+                        <span className="text-gray-400">•</span>
+                        <span className="text-gray-400">{formatTime(message.timestamp)}</span>
+                      </div>
+                    </div>
                   </div>
                 </motion.div>
               ))}
@@ -460,15 +475,23 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
               >
-                <div className="max-w-3xl mr-12">
-                  <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    </div>
+                <div className="flex items-start gap-3 max-w-[70%]">
+                  {/* Avatar */}
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold bg-gradient-to-br from-purple-500 to-purple-700">
+                    🤖
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">Proovid AI is typing...</p>
+                  
+                  {/* Typing Animation */}
+                  <div className="flex-1">
+                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 rounded-2xl px-5 py-4 shadow-md">
+                      <div className="flex space-x-2">
+                        <div className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce"></div>
+                        <div className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.15s' }}></div>
+                        <div className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }}></div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2 font-medium">Proovid AI is thinking...</p>
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -477,30 +500,38 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
           </div>
 
           {/* Message Input */}
-          <div className="border-t border-gray-200 bg-white p-4">
-            <div className="flex space-x-4">
-              <div className="flex-1">
-                <textarea
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Ask me about your video analysis results..."
-                  className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                  rows={2}
-                  disabled={isTyping}
-                />
+          <div className="border-t border-gray-200 bg-gradient-to-b from-white to-gray-50 p-6">
+            <div className="max-w-4xl mx-auto">
+              <div className="flex items-end gap-4">
+                <div className="flex-1 relative">
+                  <textarea
+                    value={inputMessage}
+                    onChange={(e) => setInputMessage(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Type your message here..."
+                    className="w-full p-4 pr-12 border-2 border-gray-300 rounded-2xl resize-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all shadow-sm hover:shadow-md"
+                    rows={1}
+                    style={{ minHeight: '56px', maxHeight: '120px' }}
+                    disabled={isTyping}
+                  />
+                  {/* Character count or emoji button can go here */}
+                </div>
+                <button
+                  onClick={handleSendMessage}
+                  disabled={!inputMessage.trim() || isTyping}
+                  className="flex-shrink-0 w-14 h-14 bg-gradient-to-br from-purple-600 to-purple-700 text-white rounded-2xl hover:from-purple-700 hover:to-purple-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 flex items-center justify-center font-bold text-xl"
+                >
+                  {isTyping ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    '➤'
+                  )}
+                </button>
               </div>
-              <button
-                onClick={handleSendMessage}
-                disabled={!inputMessage.trim() || isTyping}
-                className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-              >
-                Send
-              </button>
+              <p className="text-xs text-gray-500 mt-3 text-center">
+                Press <kbd className="px-2 py-0.5 bg-gray-200 rounded text-xs font-mono">Enter</kbd> to send • <kbd className="px-2 py-0.5 bg-gray-200 rounded text-xs font-mono">Shift+Enter</kbd> for new line
+              </p>
             </div>
-            <p className="text-xs text-gray-500 mt-2">
-              Press Enter to send • Shift+Enter for new line
-            </p>
           </div>
         </motion.div>
       </div>
