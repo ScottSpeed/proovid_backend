@@ -256,28 +256,17 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
           <h1 className="header-title">Proovid AI Chat</h1>
         </div>
         
-        <div className="header-actions">
-          {/* Director's Chair Icon - Navigate to Video Compare */}
-          <button
-            onClick={() => navigate('/video-compare')}
-            className="director-chair-button"
-            title="Video Compare"
-          >
-            🎬
-          </button>
-          
-          {/* Hamburger Menu */}
-          <button
-            onClick={() => setIsMenuOpen(true)}
-            className="hamburger-button"
-          >
-            <div className="hamburger-icon">
-              <div className="hamburger-line"></div>
-              <div className="hamburger-line"></div>
-              <div className="hamburger-line"></div>
-            </div>
-          </button>
-        </div>
+        {/* Hamburger Menu */}
+        <button
+          onClick={() => setIsMenuOpen(true)}
+          className="hamburger-button"
+        >
+          <div className="hamburger-icon">
+            <div className="hamburger-line"></div>
+            <div className="hamburger-line"></div>
+            <div className="hamburger-line"></div>
+          </div>
+        </button>
       </div>
       
       {/* Horizontal Divider Bar */}
@@ -528,6 +517,15 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                   ) : (
                     '➤'
                   )}
+                </button>
+                
+                {/* Director's Chair Floating Button - Navigate to Video Compare */}
+                <button
+                  onClick={() => navigate('/video-compare')}
+                  className="director-chair-fab"
+                  title="Video Compare"
+                >
+                  🎬
                 </button>
               </div>
               <p className="input-hint">
