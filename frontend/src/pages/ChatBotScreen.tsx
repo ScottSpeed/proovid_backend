@@ -422,6 +422,17 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
         >
           {/* Chat Messages */}
           <div className="chat-messages-container">
+            {/* Large Logo in Center when no messages */}
+            {messages.length === 0 && !isTyping && (
+              <div className="center-logo-container">
+                <img 
+                  src={proovidLogo} 
+                  alt="Proovid AI" 
+                  className="center-logo"
+                />
+              </div>
+            )}
+            
             <div className="chat-messages">
             <AnimatePresence>
               {messages.map((message) => (
