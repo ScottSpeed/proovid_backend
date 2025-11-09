@@ -153,6 +153,12 @@
   border-color: rgba(255, 107, 53, 0.4);
 }
 
+.file-item-content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
 .file-item-header {
   display: flex;
   align-items: center;

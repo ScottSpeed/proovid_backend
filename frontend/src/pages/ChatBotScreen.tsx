@@ -322,18 +322,20 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.3, delay: index * 0.1 }}
                       >
-                        <div className="file-item-header">
-                          <h4 className="file-item-name">
-                            🎬 {file.name}
-                          </h4>
-                          <span className={`file-status ${status?.status || 'pending'}`}>
-                            {status?.status || 'pending'}
-                          </span>
-                        </div>
-                        
-                        <div className="file-item-details">
-                          <p>📦 {Math.round(file.size / 1024 / 1024 * 100) / 100} MB</p>
-                          {jobId && <p className="file-item-job">ID: {jobId.slice(0, 8)}...</p>}
+                        <div className="file-item-content">
+                          <div className="file-item-header">
+                            <h4 className="file-item-name">
+                              🎬 {file.name}
+                            </h4>
+                            <span className={`file-status ${status?.status || 'pending'}`}>
+                              {status?.status || 'pending'}
+                            </span>
+                          </div>
+                          
+                          <div className="file-item-details">
+                            <p>📦 {Math.round(file.size / 1024 / 1024 * 100) / 100} MB</p>
+                            {jobId && <p className="file-item-job">ID: {jobId.slice(0, 8)}...</p>}
+                          </div>
                         </div>
 
                         {/* Progress indicator for running jobs */}
