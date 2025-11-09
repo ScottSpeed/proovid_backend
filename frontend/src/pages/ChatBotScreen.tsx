@@ -6,6 +6,7 @@ import proovidLogo from '../assets/proovid-03.jpg';
 import { apiService } from '../services/api-service';
 import type { JobStatus } from '../services/api-service';
 import type { UploadResult } from '../services/s3-upload';
+import './ChatBotScreen.css';
 
 interface ChatBotScreenProps {
   onLogout: () => void;
@@ -27,6 +28,7 @@ interface Message {
 }
 
 const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
+  // 🎨 Modern chat design with avatars and gradients - Build v2.0
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -421,46 +423,37 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
           transition={{ duration: 0.3 }}
         >
           {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gradient-to-br from-purple-50/30 via-white to-blue-50/20">
+          <div className="chat-messages-container">
+            <div className="chat-messages">
             <AnimatePresence>
               {messages.map((message) => (
                 <motion.div
                   key={message.id}
-                  className={`flex ${message.isBot ? 'justify-start' : 'justify-end'}`}
+                  className={`message-wrapper ${message.isBot ? 'bot' : 'user'}`}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <div className={`flex items-start gap-3 max-w-[70%] ${message.isBot ? 'flex-row' : 'flex-row-reverse'}`}>
+                  <div className={`message-content ${message.isBot ? 'bot' : 'user'}`}>
                     {/* Avatar */}
-                    <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold ${
-                      message.isBot ? 'bg-gradient-to-br from-purple-500 to-purple-700' : 'bg-gradient-to-br from-blue-500 to-blue-700'
-                    }`}>
+                    <div className={`message-avatar ${message.isBot ? 'bot' : 'user'}`}>
                       {message.isBot ? '🤖' : '👤'}
                     </div>
                     
                     {/* Message Content */}
-                    <div className="flex-1">
-                      <div className={`rounded-2xl px-5 py-3 shadow-md ${
-                        message.isBot
-                          ? 'bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200'
-                          : 'bg-gradient-to-br from-purple-600 to-purple-700 text-white'
-                      }`}>
-                        <p className={`text-sm leading-relaxed ${
-                          message.isBot ? 'text-gray-800' : 'text-white'
-                        }`}>
+                    <div className="message-bubble-wrapper">
+                      <div className={`message-bubble ${message.isBot ? 'bot' : 'user'}`}>
+                        <p className={`message-text ${message.isBot ? 'bot' : 'user'}`}>
                           {/* Filter out debug information */}
                           {message.text.split('🎯 **PROFESSIONAL RAG CHATBOT:**')[0].trim()}
                         </p>
                       </div>
-                      <div className={`flex items-center gap-2 mt-2 text-xs ${
-                        message.isBot ? 'justify-start' : 'justify-end'
-                      }`}>
-                        <span className="text-gray-500 font-medium">
+                      <div className={`message-meta ${message.isBot ? 'bot' : 'user'}`}>
+                        <span className="sender">
                           {message.isBot ? 'Proovid AI' : 'You'}
                         </span>
-                        <span className="text-gray-400">•</span>
-                        <span className="text-gray-400">{formatTime(message.timestamp)}</span>
+                        <span className="dot">•</span>
+                        <span className="time">{formatTime(message.timestamp)}</span>
                       </div>
                     </div>
                   </div>
@@ -471,65 +464,60 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
             {/* Typing Indicator */}
             {isTyping && (
               <motion.div
-                className="flex justify-start"
+                className="typing-indicator"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
               >
-                <div className="flex items-start gap-3 max-w-[70%]">
-                  {/* Avatar */}
-                  <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold bg-gradient-to-br from-purple-500 to-purple-700">
-                    🤖
-                  </div>
-                  
-                  {/* Typing Animation */}
-                  <div className="flex-1">
-                    <div className="bg-gradient-to-br from-gray-50 to-gray-100 border border-gray-200 rounded-2xl px-5 py-4 shadow-md">
-                      <div className="flex space-x-2">
-                        <div className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce"></div>
-                        <div className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.15s' }}></div>
-                        <div className="w-2.5 h-2.5 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }}></div>
-                      </div>
+                <div className="message-avatar bot">
+                  🤖
+                </div>
+                <div className="message-bubble-wrapper">
+                  <div className="typing-bubble">
+                    <div className="typing-dots">
+                      <div className="typing-dot"></div>
+                      <div className="typing-dot"></div>
+                      <div className="typing-dot"></div>
                     </div>
-                    <p className="text-xs text-gray-500 mt-2 font-medium">Proovid AI is thinking...</p>
                   </div>
+                  <p className="typing-text">Proovid AI is thinking...</p>
                 </div>
               </motion.div>
             )}
             
             <div ref={messagesEndRef} />
+            </div>
           </div>
 
           {/* Message Input */}
-          <div className="border-t border-gray-200 bg-gradient-to-b from-white to-gray-50 p-6">
-            <div className="max-w-4xl mx-auto">
-              <div className="flex items-end gap-4">
-                <div className="flex-1 relative">
+          <div className="message-input-container">
+            <div className="message-input-wrapper">
+              <div className="message-input-group">
+                <div className="message-input-field">
                   <textarea
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
                     onKeyPress={handleKeyPress}
                     placeholder="Type your message here..."
-                    className="w-full p-4 pr-12 border-2 border-gray-300 rounded-2xl resize-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all shadow-sm hover:shadow-md"
+                    className="message-input"
                     rows={1}
                     style={{ minHeight: '56px', maxHeight: '120px' }}
                     disabled={isTyping}
                   />
-                  {/* Character count or emoji button can go here */}
                 </div>
                 <button
                   onClick={handleSendMessage}
                   disabled={!inputMessage.trim() || isTyping}
-                  className="flex-shrink-0 w-14 h-14 bg-gradient-to-br from-purple-600 to-purple-700 text-white rounded-2xl hover:from-purple-700 hover:to-purple-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95 flex items-center justify-center font-bold text-xl"
+                  className="send-button"
                 >
                   {isTyping ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <div className="spinner"></div>
                   ) : (
                     '➤'
                   )}
                 </button>
               </div>
-              <p className="text-xs text-gray-500 mt-3 text-center">
-                Press <kbd className="px-2 py-0.5 bg-gray-200 rounded text-xs font-mono">Enter</kbd> to send • <kbd className="px-2 py-0.5 bg-gray-200 rounded text-xs font-mono">Shift+Enter</kbd> for new line
+              <p className="input-hint">
+                Press <kbd>Enter</kbd> to send • <kbd>Shift+Enter</kbd> for new line
               </p>
             </div>
           </div>
