@@ -246,28 +246,31 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Purple navigation bar - repositioned */}
-      <div className="bg-purple-600 h-16 w-full flex items-center justify-between px-6 shadow-lg">
-        <div className="flex items-center">
+      <div className="chat-header">
+        <div className="header-content">
           <img 
             src={proovidLogo} 
             alt="Proovid Logo" 
-            className="w-10 h-10 rounded-lg mr-3"
+            className="header-logo"
           />
-          <h1 className="text-white text-xl font-bold">Proovid AI Chat</h1>
+          <h1 className="header-title">Proovid AI Chat</h1>
         </div>
         
         {/* Hamburger Menu */}
         <button
           onClick={() => setIsMenuOpen(true)}
-          className="text-white p-2 hover:bg-purple-700 rounded-lg transition-colors"
+          className="hamburger-button"
         >
-          <div className="w-6 h-6 flex flex-col justify-center space-y-1">
-            <div className="w-full h-0.5 bg-white"></div>
-            <div className="w-full h-0.5 bg-white"></div>
-            <div className="w-full h-0.5 bg-white"></div>
+          <div className="hamburger-icon">
+            <div className="hamburger-line"></div>
+            <div className="hamburger-line"></div>
+            <div className="hamburger-line"></div>
           </div>
         </button>
       </div>
+      
+      {/* Horizontal Divider Bar */}
+      <div className="header-divider"></div>
 
       {/* Navigation Menu */}
       <NavigationMenu 
