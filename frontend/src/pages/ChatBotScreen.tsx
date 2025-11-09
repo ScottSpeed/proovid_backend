@@ -422,12 +422,8 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
         >
           {/* Chat Messages */}
           <div className="chat-messages-container">
-            {/* Large Logo in Center when no messages */}
-            {(() => {
-              console.log('DEBUG: messages.length =', messages.length, 'isTyping =', isTyping);
-              return null;
-            })()}
-            {messages.length === 0 && !isTyping && (
+            {/* Large Logo in Center when only welcome message or empty */}
+            {messages.length <= 1 && !isTyping && (
               <div className="center-logo-container">
                 <img 
                   src={proovidLogo} 
