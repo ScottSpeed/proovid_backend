@@ -49,8 +49,8 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
   const jobIds = state?.jobIds || [];
   const isFromUpload = state?.isFromUpload || false;
   
-  // Panel should be open if we have files or from upload
-  const [isPanelOpen, setIsPanelOpen] = useState(uploadedFiles.length > 0 || isFromUpload);
+  // Panel should be open by default
+  const [isPanelOpen, setIsPanelOpen] = useState(true);
 
   // Debug logging
   console.log('ChatBot received state:', {
@@ -256,17 +256,28 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
           <h1 className="header-title">Proovid AI Chat</h1>
         </div>
         
-        {/* Hamburger Menu */}
-        <button
-          onClick={() => setIsMenuOpen(true)}
-          className="hamburger-button"
-        >
-          <div className="hamburger-icon">
-            <div className="hamburger-line"></div>
-            <div className="hamburger-line"></div>
-            <div className="hamburger-line"></div>
-          </div>
-        </button>
+        <div className="header-actions">
+          {/* Director's Chair Icon - Navigate to Video Compare */}
+          <button
+            onClick={() => navigate('/video-compare')}
+            className="director-chair-button"
+            title="Video Compare"
+          >
+            🎬
+          </button>
+          
+          {/* Hamburger Menu */}
+          <button
+            onClick={() => setIsMenuOpen(true)}
+            className="hamburger-button"
+          >
+            <div className="hamburger-icon">
+              <div className="hamburger-line"></div>
+              <div className="hamburger-line"></div>
+              <div className="hamburger-line"></div>
+            </div>
+          </button>
+        </div>
       </div>
       
       {/* Horizontal Divider Bar */}
