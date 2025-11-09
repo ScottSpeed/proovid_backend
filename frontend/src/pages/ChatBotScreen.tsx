@@ -423,7 +423,10 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
           {/* Chat Messages */}
           <div className="chat-messages-container">
             {/* Large Logo in Center when no messages */}
-            {console.log('DEBUG: messages.length =', messages.length, 'isTyping =', isTyping)}
+            {(() => {
+              console.log('DEBUG: messages.length =', messages.length, 'isTyping =', isTyping);
+              return null;
+            })()}
             {messages.length === 0 && !isTyping && (
               <div className="center-logo-container">
                 <img 
