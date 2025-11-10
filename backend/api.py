@@ -1685,6 +1685,11 @@ async def list_jobs(current_user: Dict[str, Any] = Depends(get_current_user)):
 
 
 # --- NEW: User-specific job endpoints for multi-tenant isolation ---
+@app.options("/my-jobs")
+async def options_my_jobs():
+    """CORS preflight for /my-jobs"""
+    return {}
+
 @app.get("/my-jobs")
 async def get_my_jobs(
     limit: int = 50,
