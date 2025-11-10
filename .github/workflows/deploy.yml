@@ -1,15 +1,8 @@
-name: Deploy Backend & Worker to AWS ECS
+name: Deploy Backend & Worker to AWS ECS (DISABLED)
 
-# NOTE: This workflow only deploys backend and worker containers
-# Frontend deployment is handled via local script: frontend/scripts/deploy-frontend.bat
-# This separation avoids GitHub Actions conflicts and allows faster frontend iteration
+# DISABLED - Use deploy-backend-simple.yml instead
 
 on:
-  push:
-    branches: [ master ]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 env:

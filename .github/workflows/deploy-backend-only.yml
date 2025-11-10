@@ -1,12 +1,7 @@
-name: Deploy Backend Only (Ultra Fast)
+name: Deploy Backend Only (DISABLED)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ master ]
-    paths:
-      - 'backend/**'
-      - '.github/workflows/deploy-backend-only.yml'
 
 env:
   AWS_REGION: eu-central-1
