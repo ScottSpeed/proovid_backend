@@ -80,12 +80,23 @@ const FileUploadScreen: React.FC<FileUploadScreenProps> = ({ onLogout }) => {
           console.log(`Upload successful for ${fileName}, starting real analysis...`);
           localUploadResults.push(uploadResult);
           
-          // Start real video analysis via backend API
-          const analysisResult = await apiService.analyzeVideo({
+          // Start real video analysis via backend API (with one retry on failure)
+          let analysisResult = await apiService.analyzeVideo({
             bucket: uploadResult.bucket,
             key: uploadResult.key,
             tool: 'analyze_video_complete'
           });
+
+          if (!analysisResult.success) {
+            console.warn(`analyzeVideo failed for ${fileName}, retrying once...`);
+            // small backoff
+            await new Promise(res => setTimeout(res, 500));
+            analysisResult = await apiService.analyzeVideo({
+              bucket: uploadResult.bucket,
+              key: uploadResult.key,
+              tool: 'analyze_video_complete'
+            });
+          }
           
           if (analysisResult.success && analysisResult.job_id) {
             setAnalysisJobs(prev => ({ ...prev, [fileName]: analysisResult.job_id! }));

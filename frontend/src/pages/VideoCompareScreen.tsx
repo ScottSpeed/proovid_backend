@@ -66,22 +66,48 @@ const VideoCompareScreen: React.FC<VideoCompareScreenProps> = ({ onLogout: _ }) 
     }
   }, [isDragging]);
 
-  // Load available videos
+  // Load available videos from navigation state (uploaded files from session)
   useEffect(() => {
     const loadVideos = async () => {
       try {
         setIsLoading(true);
-        console.log('[VideoCompare] Loading videos from API...');
-        const response = await apiService.getMyJobs();
+        console.log('[VideoCompare] Loading videos from navigation state...');
         
-        console.log('[VideoCompare] API Response:', response);
+        // Get navigation state (passed from upload or chat screen)
+        const navigationState = window.history.state?.usr;
         
-        if (response.jobs && response.jobs.length > 0) {
-          const completedJobs = response.jobs.filter(
-            (job: UserJob) => job.status === 'completed' && job.s3_key
-          );
-          console.log('[VideoCompare] Completed jobs:', completedJobs);
-          setAvailableVideos(completedJobs);
+        if (navigationState?.completedJobs && navigationState.completedJobs.length > 0) {
+          console.log('[VideoCompare] Using completedJobs from navigation:', navigationState.completedJobs);
+          setAvailableVideos(navigationState.completedJobs);
+        } else if (navigationState?.uploadResults && navigationState.uploadResults.length > 0) {
+          // Use uploadResults directly - convert to UserJob format
+          console.log('[VideoCompare] Using uploadResults from navigation:', navigationState.uploadResults);
+          const jobsFromUpload = navigationState.uploadResults.map((result: any, index: number) => ({
+            job_id: result.jobId || `upload-${index}`,
+            s3_key: result.key, // UploadResult uses 'key' not 's3_key'
+            status: 'processing',
+            filename: navigationState.uploadedFiles?.[index]?.name || `Video ${index + 1}`,
+            created_at: new Date().toISOString(),
+            session_id: 'current'
+          }));
+          console.log('[VideoCompare] Converted jobs from upload:', jobsFromUpload);
+          setAvailableVideos(jobsFromUpload);
+        } else if (navigationState?.jobIds && navigationState.jobIds.length > 0) {
+          // Fallback: Create minimal job objects from jobIds
+          console.log('[VideoCompare] Creating job objects from jobIds:', navigationState.jobIds);
+          const jobsFromIds = navigationState.jobIds.map((jobId: string, index: number) => ({
+            job_id: jobId,
+            s3_key: '', // Will need to be fetched
+            status: 'processing',
+            filename: `Video ${index + 1}`,
+            created_at: new Date().toISOString(),
+            session_id: 'current'
+          }));
+          setAvailableVideos(jobsFromIds);
+        } else {
+          // No session data - don't load anything (user came directly to page)
+          console.log('[VideoCompare] No navigation state - showing empty state');
+          setAvailableVideos([]);
         }
       } catch (err) {
         console.error('[VideoCompare] Error loading videos:', err);
@@ -173,13 +199,17 @@ const VideoCompareScreen: React.FC<VideoCompareScreenProps> = ({ onLogout: _ }) 
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Group videos by folder
+  // Group videos by session (uploaded files together)
   const groupedVideos = availableVideos.reduce((acc, video) => {
-    const folder = video.s3_key?.split('/')[0] || 'Root';
-    if (!acc[folder]) {
-      acc[folder] = [];
+    // Use session_id or job creation date to group
+    const sessionLabel = video.session_id 
+      ? `Upload Session ${video.session_id.slice(0, 8)}...`
+      : 'Uploaded Files';
+    
+    if (!acc[sessionLabel]) {
+      acc[sessionLabel] = [];
     }
-    acc[folder].push(video);
+    acc[sessionLabel].push(video);
     return acc;
   }, {} as Record<string, UserJob[]>);
 
@@ -230,7 +260,7 @@ const VideoCompareScreen: React.FC<VideoCompareScreenProps> = ({ onLogout: _ }) 
         <div className="folder-tree">
           <div className="folder-root">
             <span className="folder-icon">📁</span>
-            <span className="folder-name">C: Data</span>
+            <span className="folder-name">Uploaded Files</span>
           </div>
 
           {isLoading ? (
@@ -277,7 +307,7 @@ const VideoCompareScreen: React.FC<VideoCompareScreenProps> = ({ onLogout: _ }) 
                       >
                         <span className="file-icon">🎬</span>
                         <span className="file-name">
-                          {video.video || `Video_${video.job_id.slice(0, 8)}.mp4`}
+                          {video.filename || (video.s3_key ? video.s3_key.split('/').pop() : `Video_${video.job_id.slice(0, 8)}.mp4`)}
                         </span>
                       </div>
                     ))}
@@ -348,10 +378,10 @@ const VideoCompareScreen: React.FC<VideoCompareScreenProps> = ({ onLogout: _ }) 
 
               {/* Video Labels */}
               <div className="video-label-overlay video-label-left">
-                {selectedVideo1.job.video || 'Video 1'}
+                {selectedVideo1.job.filename || (selectedVideo1.job.s3_key ? selectedVideo1.job.s3_key.split('/').pop() : 'Video 1')}
               </div>
               <div className="video-label-overlay video-label-right">
-                {selectedVideo2.job.video || 'Video 2'}
+                {selectedVideo2.job.filename || (selectedVideo2.job.s3_key ? selectedVideo2.job.s3_key.split('/').pop() : 'Video 2')}
               </div>
             </div>
 
@@ -359,11 +389,11 @@ const VideoCompareScreen: React.FC<VideoCompareScreenProps> = ({ onLogout: _ }) 
             <div className="comparison-info-bar">
               <div className="info-section">
                 <span className="info-label">Left:</span>
-                <span className="info-value">{selectedVideo1.job.video || 'Video 1'}</span>
+                <span className="info-value">{selectedVideo1.job.filename || (selectedVideo1.job.s3_key ? selectedVideo1.job.s3_key.split('/').pop() : 'Video 1')}</span>
               </div>
               <div className="info-section">
                 <span className="info-label">Right:</span>
-                <span className="info-value">{selectedVideo2.job.video || 'Video 2'}</span>
+                <span className="info-value">{selectedVideo2.job.filename || (selectedVideo2.job.s3_key ? selectedVideo2.job.s3_key.split('/').pop() : 'Video 2')}</span>
               </div>
               <div className="info-section">
                 <span className="info-label">Position:</span>

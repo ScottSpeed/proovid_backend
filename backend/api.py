@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response as StarletteResponse
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
 import os
 import uuid
@@ -404,7 +404,7 @@ app.add_middleware(
 # from worker.agent import agent  # Removed - agent framework was causing crashes
 
 # --- Direct AWS Bedrock ChatBot Implementation ---
-async def smart_rag_search(query: str, user_id: str = None) -> str:
+async def smart_rag_search(query: str, user_id: str = None, session_id: str = None) -> str:
     """
     PROFESSIONAL VECTOR DATABASE RAG SEARCH - FORCE ENABLED!
     Uses existing cost-optimized AWS Vector DB with semantic search
@@ -412,9 +412,10 @@ async def smart_rag_search(query: str, user_id: str = None) -> str:
     Args:
         query: User's search query
         user_id: User ID for multi-tenant isolation (users only see their own videos)
+        session_id: Session ID to filter videos from current upload batch
     """
     try:
-        print(f"[VECTOR-RAG] FORCE INIT semantic search for: {query} (user_id: {user_id})")
+        print(f"[VECTOR-RAG] FORCE INIT semantic search for: {query} (user_id: {user_id}, session_id: {session_id})")
         
         # FORCE Vector Database initialization - ignore availability flags
         try:
@@ -438,8 +439,8 @@ async def smart_rag_search(query: str, user_id: str = None) -> str:
             # Initialize professional chatbot with vector search
             chatbot = CostOptimizedChatBot(vector_db)
             
-            # 🔒 CRITICAL: Perform semantic search with user_id for multi-tenant isolation
-            chat_response = chatbot.chat(query, context_limit=5, user_id=user_id)
+            # 🔒 CRITICAL: Perform semantic search with user_id AND session_id for multi-tenant isolation
+            chat_response = chatbot.chat(query, context_limit=5, user_id=user_id, session_id=session_id)
             
             # Extract response
             response_text = chat_response.get("response", "")
@@ -713,7 +714,7 @@ async def basic_rag_fallback(query: str) -> str:
         return "🤖 RAG search temporarily unavailable. Please try again!"
 
 
-async def call_bedrock_chatbot(message: str, user_id: str = None) -> str:
+async def call_bedrock_chatbot(message: str, user_id: str = None, session_id: str = None) -> str:
     """
     PROFESSIONAL SOLUTION: RAG-first approach with Bedrock fallback.
     Uses smart video analysis search for instant BMW/car queries!
@@ -725,8 +726,8 @@ async def call_bedrock_chatbot(message: str, user_id: str = None) -> str:
                    'labels', 'objekte', 'inhalt', 'content', 'welche', 'was', 'wer',
                    'enthalten', 'zeigen', 'detect', 'found', 'logo', 'emblem']
     if any(term in message_lower for term in rag_triggers):
-        print(f"[DIAGNOSTIC] RAG-first approach triggered for: {message} (user_id: {user_id})")
-        rag_result = await smart_rag_search(message, user_id=user_id)
+        print(f"[DIAGNOSTIC] RAG-first approach triggered for: {message} (user_id: {user_id}, session_id: {session_id})")
+        rag_result = await smart_rag_search(message, user_id=user_id, session_id=session_id)
         if "No matches found" not in rag_result:
             print(f"[DIAGNOSTIC] RAG returned results, skipping Bedrock")
             return rag_result
@@ -955,6 +956,8 @@ If they have no analyzed videos, explain they need to upload and analyze videos 
 # --- Models ---
 class AgentRequest(BaseModel):
     message: str
+    conversation_id: Optional[str] = None
+    session_id: Optional[str] = None
 
 
 class VideoJob(BaseModel):
@@ -1051,7 +1054,9 @@ async def ask_agent(
     try:
         # Direct AWS Bedrock ChatBot implementation with video context
         user_id = current_user.get("user_id", "unknown")
-        response = await call_bedrock_chatbot(request.message, user_id)
+        session_id = request.session_id  # Use session_id from frontend for multi-tenant search
+        logger.info(f"Chat request from user {user_id} with session_id: {session_id}")
+        response = await call_bedrock_chatbot(request.message, user_id, session_id=session_id)
         return {"response": str(response)}
     except Exception as e:
         logger.exception("bedrock chatbot error")
@@ -1125,6 +1130,11 @@ async def list_videos(
 
 
 # --- Generate signed URL for video streaming ---
+@app.options("/video-url/{bucket}/{key:path}")
+async def options_video_url(bucket: str, key: str):
+    """CORS preflight for /video-url"""
+    return {}
+
 @app.get("/video-url/{bucket}/{key:path}")
 async def get_video_url(
     bucket: str,

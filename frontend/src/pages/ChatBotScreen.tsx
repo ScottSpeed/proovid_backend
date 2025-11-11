@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import NavigationMenu from '../components/NavigationMenu';
 import proovidLogo from '../assets/proovid-03.jpg';
 import { apiService } from '../services/api-service';
-import type { JobStatus } from '../services/api-service';
+import type { JobStatus, UserJob } from '../services/api-service';
 import type { UploadResult } from '../services/s3-upload';
 import './ChatBotScreen.css';
 
@@ -15,7 +15,7 @@ interface ChatBotScreenProps {
 interface LocationState {
   jobIds: string[];
   uploadResults: UploadResult[];
-  completedJobs?: JobStatus[];
+  completedJobs?: UserJob[];
   uploadedFiles?: File[];
   isFromUpload?: boolean;
 }
@@ -43,24 +43,27 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
   
   // Get data passed from previous screen
   const state = location.state as LocationState;
-  const completedJobs = state?.completedJobs || [];
   const uploadResults = state?.uploadResults || [];
   const uploadedFiles = state?.uploadedFiles || [];
   const jobIds = state?.jobIds || [];
   const isFromUpload = state?.isFromUpload || false;
   
+  // State for completed jobs (updated by polling)
+  const [completedJobs, setCompletedJobs] = useState<UserJob[]>(state?.completedJobs || []);
+  
   // Panel should be open by default
   const [isPanelOpen, setIsPanelOpen] = useState(true);
 
-  // Debug logging
-  console.log('ChatBot received state:', {
-    completedJobs,
-    uploadResults,
-    uploadedFiles,
-    jobIds,
-    isFromUpload,
-    fullState: state
-  });
+  // Debug logging (only on mount, not every render)
+  useEffect(() => {
+    console.log('[ChatBot] Initial state:', {
+      completedJobs,
+      uploadResults,
+      uploadedFiles,
+      jobIds,
+      isFromUpload
+    });
+  }, []); // Empty deps = runs once on mount
 
   useEffect(() => {
     // Add welcome message based on context
@@ -99,26 +102,41 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
 
     const pollJobStatus = async () => {
       try {
-        const result = await apiService.getJobStatus(jobIds);
+        // Use getMyJobs instead of getJobStatus to get full job info including s3_key
+        const result = await apiService.getMyJobs();
         
         if (!isActive) return;
         
         // Reset error count on success
         errorCount = 0;
         
-        if (result.success && result.statuses.length > 0) {
+        if (result.jobs && result.jobs.length > 0) {
+          // Filter to only our job IDs
+          const ourJobs = result.jobs.filter((job: UserJob) => jobIds.includes(job.job_id));
+          
           const statusMap: { [jobId: string]: JobStatus } = {};
           
-          result.statuses.forEach(status => {
-            statusMap[status.job_id] = status;
+          ourJobs.forEach((job: UserJob) => {
+            statusMap[job.job_id] = {
+              job_id: job.job_id,
+              status: job.status as any, // UserJob.status is string, JobStatus expects specific values
+              result: job.result || ''
+            };
           });
           
           setJobStatuses(statusMap);
           
           // Check if all jobs are completed
-          const allCompleted = result.statuses.every(status => 
-            status.status === 'completed' || status.status === 'failed'
+          const allCompleted = ourJobs.every((job: UserJob) => 
+            job.status === 'completed' || job.status === 'failed'
           );
+          
+          // Update completedJobs state with ANY jobs that have s3_key (even if still processing)
+          const jobsWithVideo = ourJobs.filter((job: UserJob) => job.s3_key);
+          if (jobsWithVideo.length > 0) {
+            console.log('[ChatBot] Setting completedJobs (jobs with s3_key):', jobsWithVideo);
+            setCompletedJobs(jobsWithVideo);
+          }
           
           if (allCompleted) {
             // Add completion message
@@ -181,10 +199,12 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
     setIsTyping(true);
 
     try {
-      // Send message to API
+      // Send message to API with session_id (first job ID) for context
+      const session_id = jobIds.length > 0 ? jobIds[0] : undefined;
       const response = await apiService.chat({
         message: inputMessage,
-        conversation_id: conversationId
+        conversation_id: conversationId,
+        session_id: session_id
       });
 
       if (response.success) {
@@ -306,8 +326,8 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
           
           <div className="file-explorer-content">
             {/* Show uploaded files first */}
-            {uploadedFiles.length > 0 && (
-              <div className="mb-6">
+        {uploadedFiles.length > 0 && (
+          <div className="mb-6 file-section">
                 <h3 className="file-section-title">📂 Uploaded Files</h3>
                 <div className="file-list">
                   {uploadedFiles.map((file, index) => {
@@ -355,48 +375,60 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
 
             {/* Show completed analyses */}
             {completedJobs.length > 0 && (
-              <div>
-                <h3 className="file-section-title">✅ Completed Analyses</h3>
+              <div className="file-section">
+                <h3 className="file-section-title">📊 Analysis Results</h3>
                 <div className="file-list">
-                  {completedJobs.map((job, index) => (
-                    <motion.div
-                      key={job.job_id}
-                      className="file-item"
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.3, delay: index * 0.1 }}
-                    >
-                      <div className="file-item-header">
-                        <h4 className="file-item-name">
-                          📊 Analysis {index + 1}
-                        </h4>
-                        <span className="file-status completed">
-                          Done
-                        </span>
-                      </div>
-                      
-                      <div className="file-item-details">
-                        <p className="file-item-job">ID: {job.job_id.slice(0, 12)}...</p>
-                        {uploadResults[index] && (
-                          <>
-                            <p><strong>Bucket:</strong> {uploadResults[index].bucket}</p>
-                            <p><strong>Key:</strong> {uploadResults[index].key}</p>
-                          </>
-                        )}
-                      </div>
-                      
-                      {job.result && (
-                        <div className="mt-2 p-2 bg-white rounded text-xs">
-                          <p className="text-gray-700 line-clamp-3">
-                            {typeof job.result === 'string' 
-                              ? job.result.slice(0, 100) + (job.result.length > 100 ? '...' : '')
-                              : JSON.stringify(job.result).slice(0, 100) + '...'
-                            }
-                          </p>
+                  {completedJobs.map((job, index) => {
+                    const matchingUpload = (uploadResults || []).find(u => u.key === job.s3_key) || (uploadResults || [])[index];
+                    const fileName = job.filename || (job.s3_key ? job.s3_key.split('/').pop() : `Analysis ${index + 1}`);
+                    const status = job.status || 'pending';
+                    
+                    return (
+                      <motion.div
+                        key={job.job_id}
+                        className="file-item"
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.3, delay: index * 0.1 }}
+                      >
+                        <div className="file-item-header">
+                          <h4 className="file-item-name">
+                            {status === 'completed' ? '✅' : status === 'running' ? '⏳' : status === 'failed' ? '❌' : '📊'} {fileName}
+                          </h4>
+                          <span className={`file-status ${status}`}>
+                            {status}
+                          </span>
                         </div>
-                      )}
-                    </motion.div>
-                  ))}
+                        
+                        <div className="file-item-details">
+                          <p className="file-item-job">ID: {job.job_id.slice(0, 12)}...</p>
+                          {matchingUpload && (
+                            <>
+                              <p><strong>Bucket:</strong> {matchingUpload.bucket}</p>
+                              <p><strong>Key:</strong> {matchingUpload.key}</p>
+                            </>
+                          )}
+                        </div>
+                        
+                        {/* Progress indicator for running jobs */}
+                        {status === 'running' && (
+                          <div className="mt-2">
+                            <div className="w-full bg-gray-200 rounded-full h-1">
+                              <div className="bg-yellow-500 h-1 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {typeof job.result === 'string' && job.result.trim().length > 0 && status === 'completed' && (
+                          <div className="mt-2 p-2 bg-white rounded text-xs">
+                            <p className="text-gray-700 line-clamp-3">
+                              {job.result.slice(0, 100) + (job.result.length > 100 ? '...' : '')}
+                            </p>
+                          </div>
+                        )}
+                      </motion.div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -534,7 +566,14 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                 
                 {/* Director's Chair Floating Button - Navigate to Video Compare */}
                 <button
-                  onClick={() => navigate('/video-compare')}
+                  onClick={() => navigate('/video-compare', { 
+                    state: { 
+                      completedJobs,
+                      uploadResults,
+                      uploadedFiles,
+                      jobIds 
+                    } 
+                  })}
                   className="director-chair-fab"
                   title="Video Compare"
                 >

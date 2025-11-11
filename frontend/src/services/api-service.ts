@@ -1,6 +1,6 @@
 import { authService } from './amplify-auth';
 
-const API_BASE_URL = 'https://api.proovid.de';
+const API_BASE_URL = 'https://api.proovid.ai';
 
 export interface AnalyzeRequest {
   bucket: string;
@@ -29,6 +29,7 @@ export interface JobStatusResponse {
 export interface ChatRequest {
   message: string;
   conversation_id?: string;
+  session_id?: string;
 }
 
 export interface ChatResponse {
@@ -43,9 +44,10 @@ export interface UserJob {
   status: string;
   session_id?: string;
   result?: string;
-  created_at?: number;
+  created_at?: number | string;
   updated_at?: number;
   video?: any;
+  filename?: string;
   s3_key?: string;
 }
 
@@ -194,6 +196,23 @@ class ApiService {
     } catch (error) {
       console.error('Failed to get user jobs:', error);
       return { jobs: [], total: 0, user_email: '' };
+    }
+  }
+
+  // Get signed URL for video streaming
+  async getVideoUrl(bucket: string, key: string): Promise<{ success: boolean; url?: string; error?: string }> {
+    try {
+      const response = await this.apiCall<any>(`/video-url/${bucket}/${key}`, 'GET');
+      return {
+        success: true,
+        url: response.url
+      };
+    } catch (error) {
+      console.error('Failed to get video URL:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get video URL'
+      };
     }
   }
 
