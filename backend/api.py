@@ -134,6 +134,7 @@ class UploadURLRequest(BaseModel):
     bucket: str
     key: str
     content_type: str
+    session_id: Optional[str] = None
 
 class UploadURLResponse(BaseModel):
     upload_url: str
@@ -151,13 +152,23 @@ async def get_upload_url(
     """
     try:
         s3_client = get_s3_client()
+        final_key = request.key
+        # If session_id provided, place upload into per-session folder for this user
+        if request.session_id:
+            try:
+                filename = request.key.split('/')[-1]
+                final_key = f"users/{current_user.get('sub', current_user.get('username','unknown'))}/sessions/{request.session_id}/{filename}"
+                logger.info(f"Using session-scoped key: {final_key}")
+            except Exception:
+                # Fall back to provided key if any parsing fails
+                final_key = request.key
         
         # Generate presigned URL (valid for 15 minutes)
         presigned_url = s3_client.generate_presigned_url(
             'put_object',
             Params={
                 'Bucket': request.bucket,
-                'Key': request.key,
+                'Key': final_key,
                 'ContentType': request.content_type
             },
             ExpiresIn=900  # 15 minutes
@@ -168,7 +179,7 @@ async def get_upload_url(
         return UploadURLResponse(
             upload_url=presigned_url,
             bucket=request.bucket,
-            key=request.key
+            key=final_key
         )
         
     except Exception as e:
@@ -177,6 +188,20 @@ async def get_upload_url(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate upload URL: {str(e)}"
         )
+
+
+# --- Start a new upload session (returns session_id and suggested S3 prefix) ---
+class StartSessionResponse(BaseModel):
+    session_id: str
+    s3_prefix: str
+
+
+@app.post("/upload-session", response_model=StartSessionResponse)
+async def start_upload_session(current_user: Dict[str, Any] = Depends(get_current_user)):
+    sid = str(uuid.uuid4())
+    user = current_user.get('sub') or current_user.get('username', 'unknown')
+    prefix = f"users/{user}/sessions/{sid}/"
+    return StartSessionResponse(session_id=sid, s3_prefix=prefix)
 
 
 # --- Configuration loader ---
@@ -352,6 +377,17 @@ def save_job_entry(job_id: str, status: str, result=None, video=None, created_at
                 item["s3_bucket"] = video_dict['bucket']
             elif 'key' in video_dict:
                 item["s3_key"] = video_dict['key']
+
+        # Compute a logical session-scoped key for grouping/search (does not rewrite actual S3 path)
+        try:
+            orig_key = item.get("s3_key") or (video_dict.get('key') if isinstance(video_dict, dict) else None) or ""
+            file_name = orig_key.split('/')[-1] if isinstance(orig_key, str) else str(orig_key)
+            if user_id and session_id and file_name:
+                session_prefix = f"users/{user_id}/sessions/{session_id}/"
+                item["s3_session_key"] = session_prefix + file_name
+        except Exception:
+            # Non-fatal; best-effort grouping key
+            pass
     
     t.put_item(Item=item)
 
@@ -1098,13 +1134,14 @@ async def ask_agent(
 @app.get("/ask")
 async def ask_agent_get(
     message: str = Query(..., description="Message to ask the agent"),
+    session_id: Optional[str] = Query(None, description="Session ID to scope results"),
     current_user: Dict[str, Any] = Depends(get_current_user),
     request: Request = None
 ):
     try:
         # Direct AWS Bedrock ChatBot implementation with video context
         user_id = current_user.get("user_id", "unknown")
-        response = await call_bedrock_chatbot(message, user_id)
+        response = await call_bedrock_chatbot(message, user_id, session_id=session_id)
         
         # Return response with explicit CORS headers
         return Response(
