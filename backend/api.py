@@ -1033,6 +1033,7 @@ class VideoJob(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     videos: List[VideoJob]
+    session_id: Optional[str] = None
 
 
 class AnalyzeResponseJob(BaseModel):
@@ -1398,10 +1399,11 @@ async def semantic_search_videos(
 # Universal CORS preflight for ALL endpoints
 @app.options("/{path:path}")
 async def universal_options(request: Request, path: str):
+    origin = request.headers.get("origin", "*")
     return Response(status_code=200, headers={
-        "Access-Control-Allow-Origin": "https://ui.proovid.de",
+        "Access-Control-Allow-Origin": origin,
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Headers": request.headers.get("access-control-request-headers", "*"),
         "Access-Control-Expose-Headers": "*",
         "Access-Control-Allow-Credentials": "true"
     })
@@ -1409,10 +1411,11 @@ async def universal_options(request: Request, path: str):
 # CORS preflight for /chat/suggestions
 @app.options("/chat/suggestions")
 async def options_chat_suggestions(request: Request):
+    origin = request.headers.get("origin", "*")
     return Response(status_code=200, headers={
-        "Access-Control-Allow-Origin": "https://ui.proovid.de",
+        "Access-Control-Allow-Origin": origin,
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Headers": request.headers.get("access-control-request-headers", "*"),
         "Access-Control-Expose-Headers": "*",
         "Access-Control-Allow-Credentials": "true"
     })
@@ -1724,17 +1727,17 @@ async def analyze_videos(
     logger.info(f"[USER_EXTRACT] FINAL user_id: {user_id}")
     logger.info(f"[USER_EXTRACT] FINAL user_email: {user_email}")
     
-    # Session ID = first job ID (for upload batch grouping)
-    session_id = None
+    # Session ID: prefer client-provided, else first job ID (for upload batch grouping)
+    session_id = request.session_id
     
     jobs: List[AnalyzeResponseJob] = []
     for i, video in enumerate(request.videos):
         job_id = str(uuid.uuid4())
         
-        # First job becomes the session ID
-        if i == 0:
+        # If no session yet, first job becomes the session ID (fallback)
+        if not session_id and i == 0:
             session_id = job_id
-            logger.info(f"Created new session: {session_id} for user {user_email}")
+            logger.info(f"Created new session (fallback): {session_id} for user {user_email}")
         
         logger.info(f"Creating job {job_id} (session: {session_id}) with tool: {video.tool}")
         
