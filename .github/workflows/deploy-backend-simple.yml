@@ -81,6 +81,6 @@ jobs:
       run: |
         aws ecs update-service \
           --cluster my-cluster \
-          --service proovid-backend-worker \
+          --service worker-service \
           --force-new-deployment \
           --region ${{ env.AWS_REGION }}
