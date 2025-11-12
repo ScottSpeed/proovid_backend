@@ -158,16 +158,19 @@
 }
 
 .file-item {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 107, 53, 0.2);
-  border-radius: 0.5rem;
-  padding: 0.75rem;
-  transition: all 0.2s;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 107, 53, 0.05) 100%);
+  border: 2px solid rgba(255, 107, 53, 0.3);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .file-item:hover {
-  background: rgba(255, 107, 53, 0.1);
-  border-color: rgba(255, 107, 53, 0.4);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 107, 53, 0.1) 100%);
+  border-color: rgba(255, 107, 53, 0.6);
+  box-shadow: 0 4px 12px rgba(255, 107, 53, 0.4);
+  transform: translateX(4px);
 }
 
 .file-item-content {
@@ -196,35 +199,42 @@
 
 .file-status {
   font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
-  font-weight: 600;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.375rem;
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .file-status.completed {
-  background: rgba(34, 197, 94, 0.2);
-  color: #4ade80;
+  background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+  color: #ffffff;
+  border: 1px solid #059669;
 }
 
 .file-status.running {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fbbf24;
+  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+  color: #ffffff;
+  border: 1px solid #d97706;
+  animation: pulse 2s ease-in-out infinite;
 }
 
 .file-status.failed {
-  background: rgba(239, 68, 68, 0.2);
-  color: #f87171;
+  background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+  color: #ffffff;
+  border: 1px solid #dc2626;
 }
 
 .file-status.pending {
-  background: rgba(156, 163, 175, 0.2);
-  color: #9ca3af;
+  background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);
+  color: #ffffff;
+  border: 1px solid #4b5563;
 }
 
 .file-item-details {
   font-size: 0.75rem;
-  color: #a0a0a0;
+  color: #d1d5db;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -233,12 +243,19 @@
 
 .file-item-details p {
   margin: 0;
-  line-height: 1.4;
+  line-height: 1.5;
+  color: #e5e7eb;
+}
+
+.file-item-details strong {
+  color: #ff6b35;
+  font-weight: 600;
 }
 
 .file-item-job {
   font-family: monospace;
-  color: #ff6b35;
+  color: #fbbf24;
+  font-weight: 600;
 }
 
 /* File Explorer Info Text */

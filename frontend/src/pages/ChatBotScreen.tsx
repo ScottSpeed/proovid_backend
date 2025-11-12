@@ -420,14 +420,17 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                         )}
                         
                         {typeof job.result === 'string' && job.result.trim().length > 0 && status === 'completed' && (
-                          <div className="mt-3 p-3 bg-gray-900 bg-opacity-70 rounded-lg border border-orange-500 border-opacity-30">
-                            <details open className="text-xs text-gray-200">
-                              <summary className="cursor-pointer font-semibold text-orange-400 mb-2 hover:text-orange-300">
-                                📊 Full Analysis Results
+                          <div className="mt-3 p-4 bg-gradient-to-br from-orange-50 to-red-50 rounded-lg border-2 border-orange-400 shadow-md">
+                            <details open>
+                              <summary className="cursor-pointer font-bold text-orange-600 text-sm mb-3 hover:text-orange-700 flex items-center gap-2">
+                                <span className="text-lg">📊</span>
+                                <span>Analysis Results</span>
                               </summary>
-                              <pre className="whitespace-pre-wrap overflow-x-auto max-h-96 overflow-y-auto text-xs text-gray-300 leading-relaxed">
-                                {job.result}
-                              </pre>
+                              <div className="bg-white rounded-md p-3 border border-orange-200 shadow-inner">
+                                <pre className="whitespace-pre-wrap overflow-x-auto max-h-64 overflow-y-auto text-xs text-gray-800 leading-relaxed font-mono">
+                                  {job.result}
+                                </pre>
+                              </div>
                             </details>
                           </div>
                         )}
