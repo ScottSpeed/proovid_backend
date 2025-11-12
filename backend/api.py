@@ -741,14 +741,36 @@ async def call_bedrock_chatbot(message: str, user_id: str = None, session_id: st
         # Initialize clients
         bedrock = boto3.client('bedrock-runtime', region_name='eu-central-1')
         
-        # Get user's video analysis results from DynamoDB
+        # Get user's video analysis results from DynamoDB with user_id filter
         video_context = ""
         try:
             t = job_table()
-            resp = t.scan(Limit=100)  # Get recent jobs
+            
+            # 🔒 CRITICAL: Filter by user_id for multi-tenant isolation
+            if user_id:
+                # Use query with GSI if available, otherwise scan with filter
+                resp = t.scan(
+                    FilterExpression="attribute_exists(#result) AND #status = :status AND #user_id = :uid",
+                    ExpressionAttributeNames={
+                        "#result": "result",
+                        "#status": "status",
+                        "#user_id": "user_id"
+                    },
+                    ExpressionAttributeValues={
+                        ":status": "done",
+                        ":uid": user_id
+                    },
+                    Limit=20  # Limit to user's recent jobs
+                )
+                logger.info(f"🔒 Filtered DynamoDB scan by user_id: {user_id}")
+            else:
+                # Fallback without user filter (less secure)
+                resp = t.scan(Limit=100)
+                logger.warning("⚠️ DynamoDB scan WITHOUT user_id filter - not recommended!")
+            
             jobs = resp.get("Items", [])
             
-            print(f"[DIAGNOSTIC] DynamoDB scan returned {len(jobs)} jobs")
+            print(f"[DIAGNOSTIC] DynamoDB scan returned {len(jobs)} jobs for user {user_id}")
             
             # Filter completed jobs and extract analysis results
             completed_jobs = []

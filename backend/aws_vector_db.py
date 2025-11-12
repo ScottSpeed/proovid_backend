@@ -91,13 +91,45 @@ class AWSVectorDB:
                             "space_type": "cosinesimil",
                             "engine": "nmslib"
                         }
-                    }
+                    },
+                    "user_id": {"type": "keyword"},  # Multi-tenant isolation
+                    "session_id": {"type": "keyword"}  # Session grouping
                 }
             }
         }
         
         self.client.indices.create(index=self.index_name, body=mapping)
         logger.info(f"Created OpenSearch index: {self.index_name}")
+    
+    def _enhance_german_query(self, query: str) -> str:
+        """
+        Enhance German queries for better semantic search
+        Expands common German terms to improve embedding matching
+        """
+        query_lower = query.lower()
+        
+        # German query expansion mappings
+        expansions = {
+            "welche": "welche videos zeigen",
+            "labels": "labels detected objects erkannt",
+            "bmw": "bmw logo emblem brand marke",
+            "auto": "auto car vehicle fahrzeug",
+            "person": "person menschen leute man woman",
+            "text": "text schrift writing detected",
+            "videos": "videos filme aufnahmen recordings",
+            "analyse": "analyse analysis ergebnisse results",
+            "hast du": "verfügbar available vorhanden",
+            "zeig": "zeigen show anzeigen display"
+        }
+        
+        # Apply expansions
+        enhanced = query
+        for term, expansion in expansions.items():
+            if term in query_lower:
+                enhanced = f"{query} {expansion}"
+                break  # Only apply first matching expansion
+        
+        return enhanced
     
     def create_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Create embeddings using AWS Bedrock Titan"""
@@ -124,8 +156,17 @@ class AWSVectorDB:
         
         return embeddings
     
-    def store_video_analysis(self, job_id: str, video_metadata: Dict[str, Any], analysis_results: Dict[str, Any]):
-        """Store video analysis in OpenSearch"""
+    def store_video_analysis(self, job_id: str, video_metadata: Dict[str, Any], analysis_results: Dict[str, Any], user_id: str = None, session_id: str = None):
+        """
+        Store video analysis in OpenSearch
+        
+        Args:
+            job_id: Unique job identifier
+            video_metadata: Video file metadata
+            analysis_results: Analysis results from processing
+            user_id: User ID for multi-tenant isolation
+            session_id: Session ID for grouping uploads
+        """
         try:
             # Extract semantic information
             semantic_content = []
@@ -153,7 +194,7 @@ class AWSVectorDB:
             searchable_text = " ".join(semantic_content)
             embeddings = self.create_embeddings([searchable_text])
             
-            # Prepare document
+            # Prepare document with multi-tenant fields
             doc = {
                 "job_id": job_id,
                 "video_key": video_key,
@@ -167,6 +208,15 @@ class AWSVectorDB:
                 "has_blackframes": "blackframes" in analysis_results,
                 "embedding_vector": embeddings[0]
             }
+            
+            # 🔒 Add multi-tenant isolation fields
+            if user_id:
+                doc["user_id"] = user_id
+                logger.info(f"🔒 Storing video with user_id: {user_id}")
+            
+            if session_id:
+                doc["session_id"] = session_id
+                logger.info(f"🔒 Storing video with session_id: {session_id}")
             
             # Store in OpenSearch
             response = self.client.index(
@@ -183,28 +233,67 @@ class AWSVectorDB:
             logger.error(f"Failed to store video analysis: {e}")
             raise
     
-    def semantic_search(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Perform semantic search using vector similarity"""
+    def semantic_search(self, query: str, limit: int = 10, user_id: str = None, session_id: str = None) -> List[Dict[str, Any]]:
+        """
+        Perform semantic search using vector similarity
+        
+        Args:
+            query: Search query text
+            limit: Maximum number of results
+            user_id: Filter results by user_id (multi-tenant isolation)
+            session_id: Filter results by session_id (current upload batch)
+        """
         try:
+            # 🇩🇪 Enhance German queries for better semantic matching
+            enhanced_query = self._enhance_german_query(query)
+            logger.info(f"🇩🇪 Enhanced query: '{query}' -> '{enhanced_query}'")
+            
             # Create query embedding
-            query_embeddings = self.create_embeddings([query])
+            query_embeddings = self.create_embeddings([enhanced_query])
             query_vector = query_embeddings[0]
             
-            # Vector search query
-            search_body = {
-                "size": limit,
-                "query": {
-                    "knn": {
-                        "embedding_vector": {
-                            "vector": query_vector,
-                            "k": limit
-                        }
-                    }
-                },
-                "_source": {
-                    "excludes": ["embedding_vector"]  # Don't return the large vector
+            # Build base KNN query
+            knn_query = {
+                "embedding_vector": {
+                    "vector": query_vector,
+                    "k": limit
                 }
             }
+            
+            # Add filters for multi-tenant isolation
+            filters = []
+            if user_id:
+                filters.append({"term": {"user_id": user_id}})
+                logger.info(f"🔒 Filtering search by user_id: {user_id}")
+            
+            if session_id:
+                filters.append({"term": {"session_id": session_id}})
+                logger.info(f"🔒 Filtering search by session_id: {session_id}")
+            
+            # Vector search query with optional filters
+            if filters:
+                search_body = {
+                    "size": limit,
+                    "query": {
+                        "bool": {
+                            "must": [{"knn": knn_query}],
+                            "filter": filters
+                        }
+                    },
+                    "_source": {
+                        "excludes": ["embedding_vector"]  # Don't return the large vector
+                    }
+                }
+            else:
+                search_body = {
+                    "size": limit,
+                    "query": {
+                        "knn": knn_query
+                    },
+                    "_source": {
+                        "excludes": ["embedding_vector"]  # Don't return the large vector
+                    }
+                }
             
             response = self.client.search(
                 index=self.index_name,
@@ -267,15 +356,30 @@ class AWSChatBot:
             region_name=os.environ.get('AWS_DEFAULT_REGION', 'eu-central-1')
         )
     
-    def chat(self, user_query: str, context_limit: int = 5) -> Dict[str, Any]:
-        """Process chat query with AWS Bedrock Claude"""
+    def chat(self, user_query: str, context_limit: int = 5, user_id: str = None, session_id: str = None) -> Dict[str, Any]:
+        """
+        Process chat query with AWS Bedrock Claude
+        
+        Args:
+            user_query: User's question
+            context_limit: Maximum videos to include in context
+            user_id: Filter by user_id (multi-tenant isolation)
+            session_id: Filter by session_id (current upload batch)
+        """
         try:
-            # Vector search for relevant videos
-            search_results = self.vector_db.semantic_search(user_query, limit=context_limit)
+            # 🔒 Vector search for relevant videos with user_id filter
+            search_results = self.vector_db.semantic_search(
+                user_query, 
+                limit=context_limit,
+                user_id=user_id,
+                session_id=session_id
+            )
+            
+            logger.info(f"🔒 Chat search filtered by user_id={user_id}, session_id={session_id}, found {len(search_results)} results")
             
             if not search_results:
                 return {
-                    "response": "Entschuldigung, ich konnte keine Videos finden, die zu Ihrer Anfrage passen.",
+                    "response": "Ich konnte keine passenden Videos finden. Versuchen Sie andere Suchbegriffe.",
                     "matched_videos": [],
                     "context_used": 0,
                     "query": user_query,

@@ -552,7 +552,7 @@ def _process_messages(messages):
                 logging.info("Final item keys: %s", list(item.keys()))
                 logging.info("==========================================")
                 
-                # Store in Vector DB for semantic search
+                # Store in Vector DB for semantic search with multi-tenant isolation
                 try:
                     vector_db = get_vector_db()
                     if vector_db and analysis_data:
@@ -564,7 +564,19 @@ def _process_messages(messages):
                             "s3_url": video_info.get("s3_url", "")
                         }
                         
-                        vector_db.store_video_analysis(job_id, video_metadata, analysis_data)
+                        # 🔒 CRITICAL: Pass user_id and session_id for multi-tenant isolation
+                        user_id = item.get("user_id")
+                        session_id = item.get("session_id")
+                        
+                        logging.info("🔒 Storing in Vector DB with user_id=%s, session_id=%s", user_id, session_id)
+                        
+                        vector_db.store_video_analysis(
+                            job_id, 
+                            video_metadata, 
+                            analysis_data,
+                            user_id=user_id,
+                            session_id=session_id
+                        )
                         logging.info("✅ STORED IN VECTOR DB: Job %s with %d labels, %d text detections", 
                                    job_id, 
                                    len(analysis_data.get("labels", [])),

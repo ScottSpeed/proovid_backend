@@ -420,10 +420,15 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                         )}
                         
                         {typeof job.result === 'string' && job.result.trim().length > 0 && status === 'completed' && (
-                          <div className="mt-2 p-2 bg-white rounded text-xs">
-                            <p className="text-gray-700 line-clamp-3">
-                              {job.result.slice(0, 100) + (job.result.length > 100 ? '...' : '')}
-                            </p>
+                          <div className="mt-3 p-3 bg-gray-900 bg-opacity-70 rounded-lg border border-orange-500 border-opacity-30">
+                            <details open className="text-xs text-gray-200">
+                              <summary className="cursor-pointer font-semibold text-orange-400 mb-2 hover:text-orange-300">
+                                📊 Full Analysis Results
+                              </summary>
+                              <pre className="whitespace-pre-wrap overflow-x-auto max-h-96 overflow-y-auto text-xs text-gray-300 leading-relaxed">
+                                {job.result}
+                              </pre>
+                            </details>
                           </div>
                         )}
                       </motion.div>
