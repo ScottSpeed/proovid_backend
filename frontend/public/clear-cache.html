@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Cache - Proovid</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 40px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        .status {
+            font-size: 24px;
+            margin: 20px 0;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 18px;
+            background: white;
+            color: #667eea;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            margin: 10px;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 Clear Cache & Service Workers</h1>
+        <div class="status" id="status">Ready to clear cache...</div>
+        <button onclick="clearEverything()">🚀 Clear All & Reload</button>
+        <button onclick="window.location.href='/'">← Back to App</button>
+    </div>
+
+    <script>
+        async function clearEverything() {
+            const status = document.getElementById('status');
+            
+            try {
+                status.textContent = '🔄 Clearing service workers...';
+                
+                // Unregister all service workers
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for(let registration of registrations) {
+                    await registration.unregister();
+                    console.log('Service Worker unregistered:', registration);
+                }
+                
+                status.textContent = '🗑️ Clearing caches...';
+                
+                // Clear all caches
+                if ('caches' in window) {
+                    const cacheNames = await caches.keys();
+                    await Promise.all(
+                        cacheNames.map(cacheName => caches.delete(cacheName))
+                    );
+                    console.log('All caches deleted');
+                }
+                
+                status.textContent = '🧹 Clearing local storage...';
+                
+                // Clear localStorage
+                localStorage.clear();
+                sessionStorage.clear();
+                
+                status.textContent = '✅ All cleared! Redirecting in 2 seconds...';
+                
+                // Force reload and redirect
+                setTimeout(() => {
+                    window.location.href = '/?v=' + Date.now();
+                }, 2000);
+                
+            } catch (error) {
+                status.textContent = '❌ Error: ' + error.message;
+                console.error('Clear cache error:', error);
+            }
+        }
+        
+        // Auto-clear on page load
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('auto') === 'true') {
+                clearEverything();
+            }
+        });
+    </script>
+</body>
+</html>

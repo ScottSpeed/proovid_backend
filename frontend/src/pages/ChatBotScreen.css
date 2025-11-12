@@ -164,6 +164,9 @@
   padding: 1rem;
   transition: all 0.3s ease;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  overflow: hidden; /* keep content inside */
+  height: auto;
+  min-height: 0;
 }
 
 .file-item:hover {
@@ -184,6 +187,18 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 0.5rem;
+}
+
+.file-item-header.vertical {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.file-item-sub {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .file-item-name {
@@ -213,6 +228,13 @@
   border: 1px solid #059669;
 }
 
+/* Support 'done' alias from backend */
+.file-status.done {
+  background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+  color: #ffffff;
+  border: 1px solid #059669;
+}
+
 .file-status.running {
   background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
   color: #ffffff;
@@ -235,16 +257,28 @@
 .file-item-details {
   font-size: 0.75rem;
   color: #d1d5db;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  /* Use block layout to avoid flex min-content shrinking that can
+     cause per-character wrapping in narrow containers */
+  display: block;
   margin-top: 0.5rem;
 }
 
 .file-item-details p {
-  margin: 0;
+  margin: 0 0 0.25rem 0;
   line-height: 1.5;
   color: #e5e7eb;
+  /* Keep normal word breaking by default for readability */
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+/* Only apply aggressive wrapping to spans that explicitly opt-in */
+.file-item-details .break-all {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere; /* allow long S3 keys/buckets to wrap nicely */
+  word-break: break-word;  /* break long tokens if needed without splitting every char */
+  white-space: normal;
 }
 
 .file-item-details strong {

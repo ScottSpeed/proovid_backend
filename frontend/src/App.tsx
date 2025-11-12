@@ -4,6 +4,8 @@ import IntroAndLoginScreen from './pages/IntroAndLoginScreen';
 import FileUploadScreen from './pages/FileUploadScreen';
 import AnalyzeProgressScreen from './pages/AnalyzeProgressScreen';
 import ChatBotScreen from './pages/ChatBotScreen';
+import VideoCompareScreen from './pages/VideoCompareScreen';
+import ImpressumScreen from './pages/ImpressumScreen';
 import { authService } from './services/amplify-auth';
 import './amplify-config';
 
@@ -89,6 +91,20 @@ function App() {
                 <Navigate to="/" replace />
               )
             }
+          />
+          <Route
+            path="/video-compare"
+            element={
+              isAuthenticated ? (
+                <VideoCompareScreen onLogout={handleLogout} />
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
+          />
+          <Route
+            path="/impressum"
+            element={<ImpressumScreen />}
           />
         </Routes>
       </div>

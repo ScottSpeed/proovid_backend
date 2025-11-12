@@ -10,6 +10,7 @@ set AWS_REGION=eu-central-1
 
 REM Build the frontend
 echo 📦 Building React app...
+cd ..
 call npm run build
 
 REM Check if build was successful

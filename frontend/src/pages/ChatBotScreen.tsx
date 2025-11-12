@@ -333,6 +333,9 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                   {uploadedFiles.map((file, index) => {
                     const jobId = jobIds[index];
                     const status = jobStatuses[jobId];
+                    const statusKey = (status?.status || 'pending').toLowerCase();
+                    const statusClass = statusKey === 'done' ? 'completed' : statusKey;
+                    const statusLabel = (status?.status || 'pending').toUpperCase();
                     
                     return (
                       <motion.div
@@ -343,13 +346,11 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                         transition={{ duration: 0.3, delay: index * 0.1 }}
                       >
                         <div className="file-item-content">
-                          <div className="file-item-header">
-                            <h4 className="file-item-name">
-                              🎬 {file.name}
-                            </h4>
-                            <span className={`file-status ${status?.status || 'pending'}`}>
-                              {status?.status || 'pending'}
-                            </span>
+                          <div className="file-item-header vertical">
+                            <h4 className="file-item-name">🎬 {file.name}</h4>
+                            <div className="file-item-sub">
+                              <span className={`file-status ${statusClass}`}>{statusLabel}</span>
+                            </div>
                           </div>
                           
                           <div className="file-item-details">
@@ -359,7 +360,7 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                         </div>
 
                         {/* Progress indicator for running jobs */}
-                        {status?.status === 'running' && (
+                        {(statusKey === 'running' || statusKey === 'processing') && (
                           <div className="mt-2">
                             <div className="w-full bg-gray-200 rounded-full h-1">
                               <div className="bg-yellow-500 h-1 rounded-full animate-pulse" style={{ width: '60%' }}></div>
@@ -382,6 +383,10 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                     const matchingUpload = (uploadResults || []).find(u => u.key === job.s3_key) || (uploadResults || [])[index];
                     const fileName = job.filename || (job.s3_key ? job.s3_key.split('/').pop() : `Analysis ${index + 1}`);
                     const status = job.status || 'pending';
+                    const statusKey = (status || 'pending').toLowerCase();
+                    const statusClass = statusKey === 'done' ? 'completed' : statusKey;
+                    const isRunning = statusKey === 'running' || statusKey === 'processing';
+                    const isCompleted = statusKey === 'completed' || statusKey === 'done';
                     
                     return (
                       <motion.div
@@ -391,27 +396,27 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.3, delay: index * 0.1 }}
                       >
-                        <div className="file-item-header">
+                        <div className="file-item-header vertical">
                           <h4 className="file-item-name">
-                            {status === 'completed' ? '✅' : status === 'running' ? '⏳' : status === 'failed' ? '❌' : '📊'} {fileName}
+                            {isCompleted ? '✅' : isRunning ? '⏳' : statusKey === 'failed' ? '❌' : '📊'} {fileName}
                           </h4>
-                          <span className={`file-status ${status}`}>
-                            {status}
-                          </span>
+                          <div className="file-item-sub">
+                            <span className={`file-status ${statusClass}`}>{status.toUpperCase()}</span>
+                          </div>
                         </div>
                         
                         <div className="file-item-details">
                           <p className="file-item-job">ID: {job.job_id.slice(0, 12)}...</p>
                           {matchingUpload && (
                             <>
-                              <p><strong>Bucket:</strong> {matchingUpload.bucket}</p>
-                              <p><strong>Key:</strong> {matchingUpload.key}</p>
+                              <p className="file-item-detail"><strong>Bucket:</strong> <span className="break-all">{matchingUpload.bucket}</span></p>
+                              <p className="file-item-detail"><strong>Key:</strong> <span className="break-all">{matchingUpload.key}</span></p>
                             </>
                           )}
                         </div>
                         
                         {/* Progress indicator for running jobs */}
-                        {status === 'running' && (
+                        {isRunning && (
                           <div className="mt-2">
                             <div className="w-full bg-gray-200 rounded-full h-1">
                               <div className="bg-yellow-500 h-1 rounded-full animate-pulse" style={{ width: '60%' }}></div>
@@ -419,7 +424,7 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                           </div>
                         )}
                         
-                        {typeof job.result === 'string' && job.result.trim().length > 0 && status === 'completed' && (
+                        {typeof job.result === 'string' && job.result.trim().length > 0 && isCompleted && (
                           <div className="mt-3 p-4 bg-gradient-to-br from-orange-50 to-red-50 rounded-lg border-2 border-orange-400 shadow-md">
                             <details open>
                               <summary className="cursor-pointer font-bold text-orange-600 text-sm mb-3 hover:text-orange-700 flex items-center gap-2">

@@ -1,0 +1,209 @@
+/* Impressum Screen - Colorful Design */
+.impressum-screen {
+  min-height: 100vh;
+  width: 100vw;
+  background: #f5f5f5;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Background Decorative Shapes */
+.impressum-bg-shape {
+  position: absolute;
+  border-radius: 50% 30% 40% 50%;
+  z-index: 1;
+}
+
+.impressum-shape-yellow {
+  width: 600px;
+  height: 500px;
+  background: linear-gradient(135deg, #ffd966 0%, #f4c542 100%);
+  top: -100px;
+  left: -150px;
+  transform: rotate(-25deg);
+  opacity: 0.9;
+}
+
+.impressum-shape-purple {
+  width: 800px;
+  height: 900px;
+  background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%);
+  top: -50px;
+  right: -200px;
+  border-radius: 30% 50% 40% 60%;
+  opacity: 0.95;
+}
+
+.impressum-shape-pink {
+  width: 250px;
+  height: 250px;
+  background: linear-gradient(135deg, #ff6b9d 0%, #c026d3 100%);
+  bottom: 50px;
+  right: 100px;
+  border-radius: 40% 60% 50% 40%;
+  opacity: 0.8;
+}
+
+/* Content Container */
+.impressum-content {
+  position: relative;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 24px;
+  padding: 60px 80px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  max-width: 600px;
+  text-align: left;
+}
+
+/* Logo Container */
+.impressum-logo-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 40px;
+  flex-wrap: wrap;
+}
+
+.impressum-logo-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.impressum-logo-text {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.impressum-brand {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1a1a1a;
+  letter-spacing: -0.5px;
+}
+
+.impressum-brand-ai {
+  font-size: 32px;
+  font-weight: 700;
+  color: #9333ea;
+  letter-spacing: -0.5px;
+}
+
+.impressum-tagline {
+  width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  color: #9333ea;
+  letter-spacing: 1px;
+  margin: 8px 0 0 0;
+  text-transform: uppercase;
+}
+
+/* Impressum Details */
+.impressum-details {
+  margin-bottom: 40px;
+}
+
+.impressum-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 16px;
+}
+
+.impressum-line {
+  font-size: 16px;
+  color: #999;
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+/* Back Button */
+.impressum-back-button {
+  background: linear-gradient(135deg, #9333ea 0%, #7c3aed 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  padding: 14px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(147, 51, 234, 0.3);
+}
+
+.impressum-back-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(147, 51, 234, 0.4);
+  background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%);
+}
+
+.impressum-back-button:active {
+  transform: translateY(0);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .impressum-content {
+    padding: 40px 30px;
+    margin: 20px;
+  }
+
+  .impressum-shape-yellow {
+    width: 400px;
+    height: 350px;
+    top: -80px;
+    left: -100px;
+  }
+
+  .impressum-shape-purple {
+    width: 500px;
+    height: 600px;
+    right: -150px;
+  }
+
+  .impressum-shape-pink {
+    width: 180px;
+    height: 180px;
+    bottom: 30px;
+    right: 50px;
+  }
+
+  .impressum-brand,
+  .impressum-brand-ai {
+    font-size: 28px;
+  }
+
+  .impressum-tagline {
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 480px) {
+  .impressum-content {
+    padding: 30px 20px;
+  }
+
+  .impressum-logo-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .impressum-brand,
+  .impressum-brand-ai {
+    font-size: 24px;
+  }
+
+  .impressum-back-button {
+    width: 100%;
+    padding: 12px 24px;
+  }
+}

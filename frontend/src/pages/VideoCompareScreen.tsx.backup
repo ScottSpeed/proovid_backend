@@ -1,0 +1,413 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import NavigationMenu from '../components/NavigationMenu';
+import proovidLogo from '../assets/proovid-03.jpg';
+import { apiService, type UserJob } from '../services/api-service';
+import './VideoCompareScreen.css';
+
+interface VideoCompareScreenProps {
+  onLogout: () => void;
+}
+
+interface VideoWithUrl {
+  job: UserJob;
+  url: string;
+}
+
+const VideoCompareScreen: React.FC<VideoCompareScreenProps> = ({ onLogout: _ }) => {
+  const [availableVideos, setAvailableVideos] = useState<UserJob[]>([]);
+  const [selectedVideo1, setSelectedVideo1] = useState<VideoWithUrl | null>(null);
+  const [selectedVideo2, setSelectedVideo2] = useState<VideoWithUrl | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  
+  // Video player refs
+  const video1Ref = useRef<HTMLVideoElement>(null);
+  const video2Ref = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Playback state
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  
+  // Slider position (percentage: 0-100)
+  const [sliderPosition, setSliderPosition] = useState(50);
+  const [isDragging, setIsDragging] = useState(false);
+  
+  const navigate = useNavigate();
+
+  // Handle slider dragging
+  const handleMouseDown = () => {
+    setIsDragging(true);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || !containerRef.current) return;
+    
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = (x / rect.width) * 100;
+    
+    // Clamp between 0 and 100
+    setSliderPosition(Math.max(0, Math.min(100, percentage)));
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  useEffect(() => {
+    if (isDragging) {
+      const handleGlobalMouseUp = () => setIsDragging(false);
+      window.addEventListener('mouseup', handleGlobalMouseUp);
+      return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+    }
+  }, [isDragging]);
+
+  // Load available videos
+  useEffect(() => {
+    const loadVideos = async () => {
+      try {
+        setIsLoading(true);
+        console.log('[VideoCompare] Loading videos from API...');
+        const response = await apiService.getMyJobs();
+        
+        console.log('[VideoCompare] API Response:', response);
+        
+        if (response.jobs && response.jobs.length > 0) {
+          const completedJobs = response.jobs.filter(
+            (job: UserJob) => job.status === 'completed' && job.s3_key
+          );
+          console.log('[VideoCompare] Completed jobs:', completedJobs);
+          setAvailableVideos(completedJobs);
+        }
+      } catch (err) {
+        console.error('[VideoCompare] Error loading videos:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadVideos();
+  }, []);
+
+  // Get signed URL for video
+  const getVideoUrl = async (job: UserJob): Promise<string> => {
+    try {
+      const bucket = 'christian-aws-development';
+      const response = await apiService.getVideoUrl(bucket, job.s3_key || '');
+      if (response.success && response.url) {
+        return response.url;
+      }
+      throw new Error('Failed to get video URL');
+    } catch (err) {
+      console.error('Error getting video URL:', err);
+      throw err;
+    }
+  };
+
+  // Handle video selection
+  const handleVideoSelect = async (job: UserJob, position: 1 | 2) => {
+    try {
+      const url = await getVideoUrl(job);
+      const videoWithUrl: VideoWithUrl = { job, url };
+      
+      if (position === 1) {
+        setSelectedVideo1(videoWithUrl);
+      } else {
+        setSelectedVideo2(videoWithUrl);
+      }
+    } catch (err) {
+      console.error(`Failed to load video:`, err);
+    }
+  };
+
+  // Playback controls
+  const togglePlayPause = () => {
+    const vid1 = video1Ref.current;
+    const vid2 = video2Ref.current;
+
+    if (!vid1 || !vid2) return;
+
+    if (isPlaying) {
+      vid1.pause();
+      vid2.pause();
+    } else {
+      vid2.currentTime = vid1.currentTime;
+      vid1.play();
+      vid2.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleSeek = (time: number) => {
+    const vid1 = video1Ref.current;
+    const vid2 = video2Ref.current;
+
+    if (!vid1 || !vid2) return;
+
+    vid1.currentTime = time;
+    vid2.currentTime = time;
+    setCurrentTime(time);
+  };
+
+  const handleTimeUpdate = () => {
+    const vid1 = video1Ref.current;
+    if (vid1) {
+      setCurrentTime(vid1.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    const vid1 = video1Ref.current;
+    if (vid1) {
+      setDuration(vid1.duration);
+    }
+  };
+
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+
+
+  return (
+    <div className="video-compare-mockup">
+      {/* Header Bar (wie im ChatBot) */}
+      <div className="chatbot-header">
+        <div className="header-content">
+          <img 
+            src={proovidLogo} 
+            alt="Proovid Logo" 
+            className="header-logo"
+          />
+          <h1 className="header-title">🎬 Video Comparison</h1>
+        </div>
+        
+        {/* Hamburger Menu */}
+        <button
+          onClick={() => setIsMenuOpen(true)}
+          className="hamburger-button"
+        >
+          <div className="hamburger-icon">
+            <div className="hamburger-line"></div>
+            <div className="hamburger-line"></div>
+            <div className="hamburger-line"></div>
+          </div>
+        </button>
+      </div>
+
+      {/* Horizontal Divider Bar */}
+      <div className="header-divider"></div>
+
+      {/* Navigation Menu */}
+      <NavigationMenu 
+        isOpen={isMenuOpen} 
+        onClose={() => setIsMenuOpen(false)}
+      />
+
+      {/* Main Content Wrapper */}
+      <div className="video-compare-content-wrapper">
+        {/* Left Sidebar - Folder Structure */}
+        <div className="sidebar-folders">
+        <div className="sidebar-header">
+          <button onClick={() => navigate('/chat')} className="back-icon">←</button>
+          <span className="sidebar-title">File Explorer</span>
+        </div>
+
+        <div className="folder-tree">
+          <div className="folder-root">
+            <span className="folder-icon">📁</span>
+            <span className="folder-name">C: Data</span>
+          </div>
+
+          {isLoading ? (
+            <div className="loading-folders">Loading videos...</div>
+          ) : Object.keys(groupedVideos).length === 0 ? (
+            <div className="no-videos-sidebar">
+              <p>No videos available</p>
+              <button onClick={() => navigate('/upload')} className="upload-btn-small">
+                Upload Videos
+              </button>
+            </div>
+          ) : (
+            Object.entries(groupedVideos).map(([folderName, videos]) => (
+              <div key={folderName} className="folder-group">
+                <div 
+                  className={`folder-item ${selectedFolder === folderName ? 'selected' : ''}`}
+                  onClick={() => setSelectedFolder(selectedFolder === folderName ? null : folderName)}
+                >
+                  <span className="folder-icon">📂</span>
+                  <span className="folder-label">{folderName}</span>
+                </div>
+
+                {selectedFolder === folderName && (
+                  <div className="video-files">
+                    {videos.map((video) => (
+                      <div
+                        key={video.job_id}
+                        className={`video-file ${
+                          selectedVideo1?.job.job_id === video.job_id || 
+                          selectedVideo2?.job.job_id === video.job_id 
+                            ? 'active' : ''
+                        }`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!selectedVideo1) {
+                            handleVideoSelect(video, 1);
+                          } else if (!selectedVideo2) {
+                            handleVideoSelect(video, 2);
+                          } else {
+                            // Replace video 1 if both are selected
+                            handleVideoSelect(video, 1);
+                          }
+                        }}
+                      >
+                        <span className="file-icon">🎬</span>
+                        <span className="file-name">
+                          {video.video || `Video_${video.job_id.slice(0, 8)}.mp4`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="compare-main-area">
+        {/* Top Bar */}
+        <div className="compare-top-bar">
+          <div className="app-title">
+            <span className="director-icon">🎬</span>
+            <span>Video Comparison Player</span>
+          </div>
+        </div>
+
+        {/* Video Players */}
+        {selectedVideo1 && selectedVideo2 ? (
+          <div className="video-comparison-container">
+            <div className="video-players-grid">
+              {/* Video 1 */}
+              <div className="video-panel">
+                <div className="video-window">
+                  <video
+                    ref={video1Ref}
+                    src={selectedVideo1.url}
+                    className="comparison-video"
+                    onTimeUpdate={handleTimeUpdate}
+                    onLoadedMetadata={handleLoadedMetadata}
+                    playsInline
+                  />
+                </div>
+                <div className="video-info">
+                  <div className="video-filename">{selectedVideo1.job.video || 'Video 1'}</div>
+                  <div className="video-metadata">
+                    <div className="meta-item">
+                      <span className="meta-label">codec_name:</span>
+                      <span className="meta-value">"h264"</span>
+                    </div>
+                    <div className="meta-item">
+                      <span className="meta-label">width:</span>
+                      <span className="meta-value">1920</span>
+                    </div>
+                    <div className="meta-item">
+                      <span className="meta-label">height:</span>
+                      <span className="meta-value">1080</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Video 2 */}
+              <div className="video-panel">
+                <div className="video-window">
+                  <video
+                    ref={video2Ref}
+                    src={selectedVideo2.url}
+                    className="comparison-video"
+                    playsInline
+                  />
+                </div>
+                <div className="video-info">
+                  <div className="video-filename">{selectedVideo2.job.video || 'Video 2'}</div>
+                  <div className="video-metadata">
+                    <div className="meta-item">
+                      <span className="meta-label">codec_name:</span>
+                      <span className="meta-value">"h264"</span>
+                    </div>
+                    <div className="meta-item">
+                      <span className="meta-label">width:</span>
+                      <span className="meta-value">1920</span>
+                    </div>
+                    <div className="meta-item">
+                      <span className="meta-label">height:</span>
+                      <span className="meta-value">1080</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Question Input */}
+            <div className="question-bar">
+              <input 
+                type="text" 
+                placeholder="Haben beide Filme das selbe Grading?" 
+                className="question-input"
+                disabled
+              />
+              <button className="ai-button">KI anyalisiert ...</button>
+            </div>
+          </div>
+        ) : (
+          <div className="no-selection-message">
+            <h2>📹 Select Two Videos</h2>
+            <p>Choose videos from the sidebar to compare them side by side</p>
+            {!isLoading && availableVideos.length === 0 && (
+              <button onClick={() => navigate('/upload')} className="upload-btn-large">
+                Upload Videos
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Bottom Timeline */}
+        <div className="timeline-bar">
+          <button 
+            className="play-control" 
+            onClick={togglePlayPause}
+            disabled={!selectedVideo1 || !selectedVideo2}
+          >
+            {isPlaying ? '⏸' : '▶'}
+          </button>
+          
+          <div className="timeline-track">
+            <span className="time-display">{formatTime(currentTime)}</span>
+            <input
+              type="range"
+              min="0"
+              max={duration || 0}
+              value={currentTime}
+              onChange={(e) => handleSeek(parseFloat(e.target.value))}
+              className="timeline-slider-mockup"
+              disabled={!selectedVideo1 || !selectedVideo2}
+            />
+            <span className="time-display">{formatTime(duration)}</span>
+          </div>
+
+          <button className="volume-control">🔊</button>
+        </div>
+      </div>
+      </div> {/* Close video-compare-content-wrapper */}
+    </div>
+  );
+};
+
+export default VideoCompareScreen;

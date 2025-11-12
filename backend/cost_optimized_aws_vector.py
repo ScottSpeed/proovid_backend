@@ -47,7 +47,14 @@ class CostOptimizedAWSVectorDB:
         except Exception as e:
             logger.error(f"Error with DynamoDB table: {e}")
     
-    def store_video_analysis(self, job_id: str, video_metadata: Dict[str, Any], analysis_results: Dict[str, Any]):
+    def store_video_analysis(
+        self,
+        job_id: str,
+        video_metadata: Dict[str, Any],
+        analysis_results: Dict[str, Any],
+        user_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ):
         """Store video analysis in DynamoDB with searchable metadata"""
         try:
             # Extract searchable keywords
@@ -87,18 +94,19 @@ class CostOptimizedAWSVectorDB:
             current_time = int(datetime.now().timestamp())
             
             # Update existing job entry with search metadata
-            update_expression = """
-                SET 
-                search_keywords = :keywords,
-                semantic_tags = :tags,
-                searchable_content = :content,
-                has_labels = :has_labels,
-                has_text = :has_text,
-                has_blackframes = :has_blackframes,
-                text_content = :text_content,
-                search_updated_at = :search_time
-            """
-            
+            # Build update with optional user/session persistence (without overwriting existing)
+            update_expression = [
+                "SET",
+                "search_keywords = :keywords",
+                "semantic_tags = :tags",
+                "searchable_content = :content",
+                "has_labels = :has_labels",
+                "has_text = :has_text",
+                "has_blackframes = :has_blackframes",
+                "text_content = :text_content",
+                "search_updated_at = :search_time",
+            ]
+
             expression_values = {
                 ":keywords": search_keywords[:50],  # DynamoDB list limit
                 ":tags": semantic_tags,
@@ -107,13 +115,21 @@ class CostOptimizedAWSVectorDB:
                 ":has_text": "text_detection" in analysis_results,
                 ":has_blackframes": "blackframes" in analysis_results,
                 ":text_content": text_content[:10],  # Limit text items
-                ":search_time": current_time
+                ":search_time": current_time,
             }
-            
+
+            # If provided, ensure user/session fields are set (but don't overwrite existing)
+            if user_id:
+                update_expression.append("user_id = if_not_exists(user_id, :uid)")
+                expression_values[":uid"] = user_id
+            if session_id:
+                update_expression.append("session_id = if_not_exists(session_id, :sid)")
+                expression_values[":sid"] = session_id
+
             self.table.update_item(
                 Key={"job_id": job_id},
-                UpdateExpression=update_expression,
-                ExpressionAttributeValues=expression_values
+                UpdateExpression="\n                ".join(update_expression),
+                ExpressionAttributeValues=expression_values,
             )
             
             logger.info(f"Stored searchable metadata for job {job_id}")
@@ -167,7 +183,26 @@ class CostOptimizedAWSVectorDB:
                 "tiere": ["animal", "pet", "creature"],
                 "kleidung": ["clothing", "coat", "apparel"],
                 "logo": ["logo", "emblem", "symbol", "brand"],
-                "text": ["text", "writing", "license plate"]
+                "text": ["text", "writing", "license plate"],
+                # Color synonyms (helps queries like 'blaues auto' / 'blue car')
+                "blau": ["blue"],
+                "blaues": ["blue"],
+                "blauer": ["blue"],
+                "blauen": ["blue"],
+                "blue": ["blue"],
+                "rot": ["red"],
+                "rotes": ["red"],
+                "roter": ["red"],
+                "roten": ["red"],
+                "red": ["red"],
+                "weiß": ["white"],
+                "weiss": ["white"],
+                "white": ["white"],
+                "schwarz": ["black"],
+                "black": ["black"],
+                "grün": ["green"],
+                "gruen": ["green"],
+                "green": ["green"]
             }
             
             query_keywords = []

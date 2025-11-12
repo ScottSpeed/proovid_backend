@@ -29,7 +29,7 @@ const NavigationMenu: React.FC<NavigationMenuProps> = ({ isOpen, onClose }) => {
         </div>
         
         <nav className="nav-content">
-          <a href="#impressum" className="nav-item">
+          <a href="/impressum" className="nav-item">
             📄 Impressum
           </a>
         </nav>
