@@ -749,20 +749,27 @@ async def call_bedrock_chatbot(message: str, user_id: str = None, session_id: st
             # 🔒 CRITICAL: Filter by user_id for multi-tenant isolation
             if user_id:
                 # Use query with GSI if available, otherwise scan with filter
+                expr_names = {
+                    "#result": "result",
+                    "#status": "status",
+                    "#user_id": "user_id"
+                }
+                expr_values = {
+                    ":status": "done",
+                    ":uid": user_id
+                }
+                filter_expr = "attribute_exists(#result) AND #status = :status AND #user_id = :uid"
+                if session_id:
+                    expr_names["#session_id"] = "session_id"
+                    expr_values[":sid"] = session_id
+                    filter_expr += " AND #session_id = :sid"
                 resp = t.scan(
-                    FilterExpression="attribute_exists(#result) AND #status = :status AND #user_id = :uid",
-                    ExpressionAttributeNames={
-                        "#result": "result",
-                        "#status": "status",
-                        "#user_id": "user_id"
-                    },
-                    ExpressionAttributeValues={
-                        ":status": "done",
-                        ":uid": user_id
-                    },
+                    FilterExpression=filter_expr,
+                    ExpressionAttributeNames=expr_names,
+                    ExpressionAttributeValues=expr_values,
                     Limit=20  # Limit to user's recent jobs
                 )
-                logger.info(f"🔒 Filtered DynamoDB scan by user_id: {user_id}")
+                logger.info(f"🔒 Filtered DynamoDB scan by user_id: {user_id} and session_id: {session_id}")
             else:
                 # Fallback without user filter (less secure)
                 resp = t.scan(Limit=100)
@@ -1019,6 +1026,7 @@ class JobStatusResponse(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     context_limit: int = 5
+    session_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -1300,7 +1308,7 @@ async def chat_with_videos(
     try:
         # Use our integrated Bedrock ChatBot with video analysis
         user_id = current_user.get("sub", "anonymous")
-        response_text = await call_bedrock_chatbot(request.message, user_id)
+        response_text = await call_bedrock_chatbot(request.message, user_id, session_id=request.session_id)
         
         # For now, return empty matched_videos since we're using integrated analysis
         return ChatResponse(
@@ -1609,10 +1617,47 @@ def start_worker_container(bucket: str, key: str, job_id: str, tool: str):
     }
     logger.info("Enqueuing job %s to SQS %s with tool %s and file_url %s", job_id, sqs_url, tool, file_url)
     try:
-        sqs.send_message(QueueUrl=sqs_url, MessageBody=json.dumps(body))
-        logger.info("Successfully enqueued job %s to SQS", job_id)
+        resp = sqs.send_message(QueueUrl=sqs_url, MessageBody=json.dumps(body))
+        message_id = resp.get("MessageId", "")
+        logger.info("Successfully enqueued job %s to SQS (MessageId=%s)", job_id, message_id)
+
+        # Mark job as enqueued and record MessageId for traceability
+        table = boto3.resource("dynamodb", region_name=cfg("AWS_DEFAULT_REGION", "eu-central-1"), config=boto3_config).Table(cfg("JOB_TABLE", "proov_jobs"))
+        now_ts = int(time.time())
+        table.update_item(
+            Key={"job_id": job_id},
+            UpdateExpression=(
+                "SET sqs_message_id = :mid, enqueued_at = :ts, "
+                "enqueue_attempts = if_not_exists(enqueue_attempts, :zero) + :one"
+            ),
+            ExpressionAttributeValues={
+                ":mid": message_id,
+                ":ts": now_ts,
+                ":zero": 0,
+                ":one": 1,
+            },
+        )
     except Exception as e:
         logger.exception("Failed to send SQS message for job %s: %s", job_id, e)
+        # Record enqueue error so we can requeue later
+        try:
+            table = boto3.resource("dynamodb", region_name=cfg("AWS_DEFAULT_REGION", "eu-central-1"), config=boto3_config).Table(cfg("JOB_TABLE", "proov_jobs"))
+            now_ts = int(time.time())
+            table.update_item(
+                Key={"job_id": job_id},
+                UpdateExpression=(
+                    "SET enqueue_last_error = :err, enqueue_error_at = :ts, "
+                    "enqueue_attempts = if_not_exists(enqueue_attempts, :zero) + :one"
+                ),
+                ExpressionAttributeValues={
+                    ":err": str(e),
+                    ":ts": now_ts,
+                    ":zero": 0,
+                    ":one": 1,
+                },
+            )
+        except Exception:
+            logger.exception("Failed to write enqueue error for job %s", job_id)
         raise
 
 
@@ -1666,16 +1711,10 @@ async def analyze_videos(
             session_id=session_id
         )
         
-        # Use direct agent analysis for new label detection features
-        if video.tool == "rekognition_detect_labels":
-            background_tasks.add_task(
-                start_agent_analysis, video.bucket, video.key, job_id, video.tool
-            )
-        else:
-            # Use worker for other tools
-            background_tasks.add_task(
-                start_worker_container, video.bucket, video.key, job_id, video.tool
-            )
+        # Always enqueue to worker so every video goes through the same reliable queue
+        background_tasks.add_task(
+            start_worker_container, video.bucket, video.key, job_id, video.tool
+        )
         jobs.append(AnalyzeResponseJob(job_id=job_id, video=video))
     
     logger.info(f"Created {len(jobs)} jobs in session {session_id} for user {user_email}")

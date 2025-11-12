@@ -60,21 +60,21 @@ class CostOptimizedAWSVectorDB:
             # Extract searchable keywords
             search_keywords = []
             semantic_tags = []
-            
+
             # Extract from video metadata
             video_key = video_metadata.get("key", "")
             bucket = video_metadata.get("bucket", "")
-            
+
             # Add filename keywords
             filename_words = video_key.replace('/', ' ').replace('_', ' ').replace('-', ' ').split()
             search_keywords.extend([word.lower() for word in filename_words if len(word) > 2])
-            
+
             # Extract from analysis results
             if "label_detection" in analysis_results:
                 labels = analysis_results["label_detection"].get("semantic_tags", [])
                 semantic_tags.extend(labels[:30])  # Limit to 30 tags
                 search_keywords.extend([tag.lower() for tag in labels])
-            
+
             # Extract text content
             text_content = []
             if "text_detection" in analysis_results:
@@ -86,13 +86,13 @@ class CostOptimizedAWSVectorDB:
                         # Add text words as keywords
                         text_words = text.lower().split()
                         search_keywords.extend([word for word in text_words if len(word) > 2])
-            
+
             # Create searchable content string
             searchable_content = " ".join(search_keywords[:100])  # Limit size
-            
+
             # Prepare DynamoDB item with search fields
             current_time = int(datetime.now().timestamp())
-            
+
             # Update existing job entry with search metadata
             # Build update with optional user/session persistence (without overwriting existing)
             update_expression = [
@@ -590,6 +590,7 @@ class CostOptimizedChatBot:
                 "score": r.get("score", 0.0)
             }
             enriched.append(item)
+        dedup_count = len(enriched)
 
         # 1) BMW intent: name videos and show sample text hit
         if is_bmw:
@@ -611,7 +612,7 @@ class CostOptimizedChatBot:
 
         # 2) Text intent: list top texts per video
         if is_text:
-            response = f"Gefundener Text in {count} Video{'s' if count!=1 else ''} (Auszug):\n"
+            response = f"Gefundener Text in {dedup_count} Video{'s' if dedup_count!=1 else ''} (Auszug):\n"
             for e in enriched[:5]:
                 texts = [t for t in e["texts"] if t][:3]
                 if texts:
@@ -635,7 +636,7 @@ class CostOptimizedChatBot:
             return response.strip()
 
         # 4) Generic listing: show filenames and a few meaningful tags
-        response = f"Ich habe {count} Video{'s' if count != 1 else ''} gefunden.\n"
+        response = f"Ich habe {dedup_count} Video{'s' if dedup_count != 1 else ''} gefunden.\n"
         for e in enriched[:5]:
             details = []
             if e["tags"]:
