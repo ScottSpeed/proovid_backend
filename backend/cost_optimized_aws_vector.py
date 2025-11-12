@@ -302,6 +302,14 @@ class CostOptimizedAWSVectorDB:
                     else:
                         filter_expr = filter_expr | condition  # OR all keywords
                 
+                # Intent constraints (ensure we actually have the detected modality)
+                if intent_text:
+                    has_text_cond = Attr('has_text').eq(True)
+                    filter_expr = has_text_cond if filter_expr is None else (filter_expr & has_text_cond)
+                if intent_blackframes:
+                    has_bf_cond = Attr('has_blackframes').eq(True)
+                    filter_expr = has_bf_cond if filter_expr is None else (filter_expr & has_bf_cond)
+
                 # ========== CRITICAL: Multi-Tenant User Isolation ==========
                 # ALWAYS filter by user_id to ensure users only see their own videos
                 if user_id:
@@ -390,6 +398,15 @@ class CostOptimizedAWSVectorDB:
         for keyword in query_keywords:
             if keyword in searchable_content.split():
                 score += 0.5
+
+        # If user asked for a colored car, prefer items that have vehicle tags
+        color_terms = {"blue", "blau", "rot", "red", "grün", "gruen", "green", "weiß", "weiss", "white", "black", "schwarz"}
+        wants_color = any(k in color_terms for k in query_keywords)
+        car_terms = {"car", "vehicle", "auto", "automobile"}
+        has_vehicle_tag = any(any(ct in (t or "").lower() for ct in car_terms) for t in semantic_tags)
+        if wants_color and has_vehicle_tag:
+            score += 3.0
+        
         
         return score
     
@@ -553,14 +570,19 @@ class CostOptimizedChatBot:
         is_text = any(w in q for w in ["text", "schrift", "ocr", "kennzeichen", "license plate"]) and not is_bmw
         is_black = any(w in q for w in ["blackframe", "black frame", "schwarze", "schwarzen", "dunkle", "blackframes"])
 
-        # Build per-result summaries used below
+        # Build per-result summaries used below (dedupe by filename)
         enriched = []
+        seen = set()
         for r in results:
             m = r.get("metadata", {})
             tags = filtered_tags(m.get("semantic_tags", []))
             texts = m.get("text_content", []) or []
+            name = fname(m.get("video_key", ""))
+            if name.lower() in seen:
+                continue
+            seen.add(name.lower())
             item = {
-                "name": fname(m.get("video_key", "")),
+                "name": name,
                 "tags": tags,
                 "texts": texts,
                 "has_blackframes": m.get("has_blackframes", False),

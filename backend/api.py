@@ -1531,6 +1531,54 @@ def reindex_jobs_background(completed_jobs: List[Dict[str, Any]]):
     
     logger.info(f"Reindexing completed. Successfully reindexed {reindexed_count}/{len(completed_jobs)} jobs")
 
+@app.post("/jobs/requeue-stale")
+async def requeue_stale_jobs(
+    max_age_seconds: int = Query(120, description="Requeue jobs queued longer than this many seconds"),
+    current_user: Dict[str, Any] = Depends(require_admin)
+):
+    """Requeue any 'queued' jobs older than max_age_seconds back to SQS worker.
+    Admin-only safety net for stuck jobs.
+    """
+    try:
+        t = job_table()
+        now_ts = int(time.time())
+        # Scan for queued jobs (small scale; consider GSI for large scale)
+        resp = t.scan(
+            FilterExpression="#status = :queued",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={":queued": "queued"}
+        )
+        items = resp.get("Items", [])
+        requeued = 0
+        skipped = 0
+        for it in items:
+            created_at = int(it.get("created_at", now_ts))
+            age = now_ts - created_at
+            if age < max_age_seconds:
+                skipped += 1
+                continue
+            # Extract bucket/key
+            bucket = it.get("s3_bucket")
+            key = it.get("s3_key")
+            job_id = it.get("job_id")
+            tool = (it.get("video", {}) or {}).get("tool")
+            if isinstance(tool, str):
+                pass
+            elif isinstance(it.get("video"), str):
+                try:
+                    tool = json.loads(it["video"]).get("tool")
+                except Exception:
+                    tool = None
+            if not tool:
+                tool = "analyze_video_complete"
+            if bucket and key and job_id:
+                start_worker_container(bucket, key, job_id, tool)
+                requeued += 1
+        return {"requeued": requeued, "skipped_recent": skipped, "checked": len(items)}
+    except Exception as e:
+        logger.exception("Failed to requeue stale jobs")
+        raise HTTPException(status_code=500, detail=f"Requeue failed: {e}")
+
 # --- Worker launcher (legacy SQS approach) ---
 def start_worker_container(bucket: str, key: str, job_id: str, tool: str):
     # Enqueue job to SQS for on-demand worker processing
