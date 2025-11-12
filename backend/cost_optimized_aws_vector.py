@@ -151,10 +151,15 @@ class CostOptimizedAWSVectorDB:
         """
         try:
             # Smart query processing - extract meaningful search terms
-            query_words = query.lower().split()
-            
-            # Filter out common German question words and focus on content
-            stopwords = {"welche", "videos", "enthalten", "zeig", "mir", "mit", "haben", "gibt", "das", "die", "der", "den", "eine", "einen", "text", "sind", "wie", "was", "wo", "wer", "wann", "warum"}
+            query_lower = query.lower()
+            query_words = query_lower.split()
+
+            # Detect common intents up front (improves recall when keywords are generic)
+            intent_text = any(w in query_lower for w in ["text", "schrift", "ocr", "kennzeichen", "license plate"])  # "Welcher Text wurde gefunden?"
+            intent_blackframes = any(w in query_lower for w in ["blackframe", "black frame", "schwarze", "schwarzen", "dunkle", "dark frame", "blackframes"])  # "Gibt es Blackframes?"
+
+            # Filter out common German question words and focus on content (keep 'text' out of stopwords!)
+            stopwords = {"welche", "videos", "enthalten", "zeig", "mir", "mit", "haben", "gibt", "das", "die", "der", "den", "eine", "einen", "sind", "wie", "was", "wo", "wer", "wann", "warum"}
             
             # German-English synonym mapping with plural/singular handling
             synonyms = {
@@ -226,8 +231,43 @@ class CostOptimizedAWSVectorDB:
                 'Limit': 100  # Scan more, then rank
             }
             
-            # Build filter expression for keyword matching
-            if query_keywords:
+            # Build filter expression for keyword matching or intent-specific scan
+            if intent_text and not query_keywords:
+                # If user asks generally about text, prefer items that actually have text detections
+                from boto3.dynamodb.conditions import Attr
+                filter_expr = Attr('has_text').eq(True)
+
+                # Multi-tenant filters
+                if user_id:
+                    filter_expr = filter_expr & Attr('user_id').eq(user_id)
+                    logger.info(f"🔒 Filtering search results by user_id: {user_id}")
+                if session_id:
+                    filter_expr = filter_expr & Attr('session_id').eq(session_id)
+                    logger.info(f"🔒 Filtering search results by session_id: {session_id}")
+
+                scan_params = {
+                    'FilterExpression': filter_expr,
+                    'Limit': 100
+                }
+
+            elif intent_blackframes and not query_keywords:
+                # If user asks generally about blackframes, look for items where we detected them
+                from boto3.dynamodb.conditions import Attr
+                filter_expr = Attr('has_blackframes').eq(True)
+
+                if user_id:
+                    filter_expr = filter_expr & Attr('user_id').eq(user_id)
+                    logger.info(f"🔒 Filtering search results by user_id: {user_id}")
+                if session_id:
+                    filter_expr = filter_expr & Attr('session_id').eq(session_id)
+                    logger.info(f"🔒 Filtering search results by session_id: {session_id}")
+
+                scan_params = {
+                    'FilterExpression': filter_expr,
+                    'Limit': 100
+                }
+
+            elif query_keywords:
                 conditions = []
                 expression_values = {}
                 
@@ -239,7 +279,7 @@ class CostOptimizedAWSVectorDB:
                     conditions.append(f"contains(searchable_content, {attr_name})")
                 
             # PROFESSIONAL: Use proper DynamoDB FilterExpression with case-insensitive matching
-            if query_keywords:
+            if not scan_params.get('FilterExpression') and query_keywords:
                 from boto3.dynamodb.conditions import Attr
                 
                 # Build proper OR condition for all keywords
@@ -303,7 +343,10 @@ class CostOptimizedAWSVectorDB:
                             "has_labels": item.get("has_labels", False),
                             "has_text": item.get("has_text", False),
                             "has_blackframes": item.get("has_blackframes", False),
-                            "timestamp": item.get("search_updated_at", 0)
+                            "blackframes_count": (item.get("summary", {}) or {}).get("blackframes_count", 0),
+                            "timestamp": item.get("search_updated_at", 0),
+                            # Provide sample texts for better answers
+                            "text_content": item.get("text_content", [])
                         },
                         "document": item.get("searchable_content", "")
                     }
@@ -476,30 +519,112 @@ class CostOptimizedChatBot:
     def _is_simple_query(self, query: str) -> bool:
         """Check if query can be answered without LLM"""
         simple_patterns = [
-            "zeig", "finde", "suche", "welche", "gibt es", "haben", "mit", "videos"
+            "zeig", "finde", "suche", "welche", "gibt es", "haben", "mit", "videos", "bmw", "blackframe", "blau", "blue", "rot", "grün", "gruen", "text"
         ]
         query_lower = query.lower()
         return any(pattern in query_lower for pattern in simple_patterns)
     
     def _generate_simple_response(self, query: str, results: List[Dict]) -> str:
-        """Generate simple response without LLM"""
+        """Generate simple response without LLM. Prefer filenames and concrete facts over vague tags."""
+        q = query.lower()
         count = len(results)
-        
         if count == 0:
             return "Keine Videos gefunden."
-        
-        response = f"Ich habe {count} Video{'s' if count != 1 else ''} gefunden"
-        
-        # Add details about top results
-        if results:
-            top_result = results[0]
-            tags = top_result.get("metadata", {}).get("semantic_tags", [])
-            if tags:
-                response += f" mit Inhalten wie: {', '.join(tags[:5])}"
-        
-        response += ". Hier sind die Ergebnisse:"
-        
-        return response
+
+        # Helper: filename
+        def fname(path: str) -> str:
+            return path.split('/')[-1] if path else "Unbekanntes Video"
+
+        # Helper: filter overly generic tags that confuse answers
+        generic_tags = {"file", "page", "text", "webpage", "computer hardware", "label", "document"}
+        def filtered_tags(tags: List[str]) -> List[str]:
+            out = []
+            for t in tags or []:
+                tl = str(t).strip()
+                if not tl:
+                    continue
+                if tl.lower() in generic_tags:
+                    continue
+                out.append(tl)
+            return out
+
+        # Intent branches
+        is_bmw = "bmw" in q
+        is_text = any(w in q for w in ["text", "schrift", "ocr", "kennzeichen", "license plate"]) and not is_bmw
+        is_black = any(w in q for w in ["blackframe", "black frame", "schwarze", "schwarzen", "dunkle", "blackframes"])
+
+        # Build per-result summaries used below
+        enriched = []
+        for r in results:
+            m = r.get("metadata", {})
+            tags = filtered_tags(m.get("semantic_tags", []))
+            texts = m.get("text_content", []) or []
+            item = {
+                "name": fname(m.get("video_key", "")),
+                "tags": tags,
+                "texts": texts,
+                "has_blackframes": m.get("has_blackframes", False),
+                "blackframes_count": m.get("blackframes_count", 0),
+                "score": r.get("score", 0.0)
+            }
+            enriched.append(item)
+
+        # 1) BMW intent: name videos and show sample text hit
+        if is_bmw:
+            hits = []
+            for e in enriched:
+                if any("bmw" in (t or "").lower() for t in e["texts"]):
+                    hits.append(e)
+            # If no explicit text hits, fall back to general matches
+            if not hits:
+                hits = enriched
+            response = f"Ja, BMW kommt in {len(hits)} Video{'s' if len(hits)!=1 else ''} vor:\n"
+            for e in hits[:5]:
+                sample = next((t for t in e["texts"] if "bmw" in t.lower()), None)
+                if sample:
+                    response += f"• {e['name']} – Text: \"{sample}\"\n"
+                else:
+                    response += f"• {e['name']}\n"
+            return response.strip()
+
+        # 2) Text intent: list top texts per video
+        if is_text:
+            response = f"Gefundener Text in {count} Video{'s' if count!=1 else ''} (Auszug):\n"
+            for e in enriched[:5]:
+                texts = [t for t in e["texts"] if t][:3]
+                if texts:
+                    response += f"• {e['name']}: {', '.join(texts)}\n"
+                else:
+                    response += f"• {e['name']}: (kein Text erkannt)\n"
+            return response.strip()
+
+        # 3) Blackframes intent: list videos with counts
+        if is_black:
+            hits = [e for e in enriched if e["has_blackframes"]]
+            if not hits:
+                return "Keine Blackframes in deinen Videos gefunden."
+            response = f"Blackframes gefunden in {len(hits)} Video{'s' if len(hits)!=1 else ''}:\n"
+            for e in hits[:10]:
+                cnt = e.get("blackframes_count", 0) or 0
+                if cnt:
+                    response += f"• {e['name']}: {cnt} Blackframes\n"
+                else:
+                    response += f"• {e['name']}\n"
+            return response.strip()
+
+        # 4) Generic listing: show filenames and a few meaningful tags
+        response = f"Ich habe {count} Video{'s' if count != 1 else ''} gefunden.\n"
+        for e in enriched[:5]:
+            details = []
+            if e["tags"]:
+                details.append(", ".join(e["tags"][:3]))
+            if e["texts"]:
+                details.append(f"Text: {', '.join(e['texts'][:2])}")
+            if details:
+                response += f"• {e['name']} – {', '.join(details)}\n"
+            else:
+                response += f"• {e['name']}\n"
+        return response.strip()
     
     def _generate_bedrock_response(self, user_query: str, results: List[Dict]) -> str:
         """Generate response using Bedrock (cost-optimized)"""

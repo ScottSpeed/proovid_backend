@@ -396,23 +396,25 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.3, delay: index * 0.1 }}
                       >
-                        <div className="file-item-header vertical">
-                          <h4 className="file-item-name">
-                            {isCompleted ? '✅' : isRunning ? '⏳' : statusKey === 'failed' ? '❌' : '📊'} {fileName}
-                          </h4>
-                          <div className="file-item-sub">
-                            <span className={`file-status ${statusClass}`}>{status.toUpperCase()}</span>
+                        <div className="file-item-content">
+                          <div className="file-item-header vertical">
+                            <h4 className="file-item-name">
+                              {isCompleted ? '✅' : isRunning ? '⏳' : statusKey === 'failed' ? '❌' : '📊'} {fileName}
+                            </h4>
+                            <div className="file-item-sub">
+                              <span className={`file-status ${statusClass}`}>{status.toUpperCase()}</span>
+                            </div>
                           </div>
-                        </div>
-                        
-                        <div className="file-item-details">
-                          <p className="file-item-job">ID: {job.job_id.slice(0, 12)}...</p>
-                          {matchingUpload && (
-                            <>
-                              <p className="file-item-detail"><strong>Bucket:</strong> <span className="break-all">{matchingUpload.bucket}</span></p>
-                              <p className="file-item-detail"><strong>Key:</strong> <span className="break-all">{matchingUpload.key}</span></p>
-                            </>
-                          )}
+                          
+                          <div className="file-item-details">
+                            <p className="file-item-job">ID: {job.job_id.slice(0, 12)}...</p>
+                            {matchingUpload && (
+                              <>
+                                <p className="file-item-detail"><strong>Bucket:</strong> <span className="break-all">{matchingUpload.bucket}</span></p>
+                                <p className="file-item-detail"><strong>Key:</strong> <span className="break-all">{matchingUpload.key}</span></p>
+                              </>
+                            )}
+                          </div>
                         </div>
                         
                         {/* Progress indicator for running jobs */}
@@ -424,21 +426,6 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                           </div>
                         )}
                         
-                        {typeof job.result === 'string' && job.result.trim().length > 0 && isCompleted && (
-                          <div className="mt-3 p-4 bg-gradient-to-br from-orange-50 to-red-50 rounded-lg border-2 border-orange-400 shadow-md">
-                            <details open>
-                              <summary className="cursor-pointer font-bold text-orange-600 text-sm mb-3 hover:text-orange-700 flex items-center gap-2">
-                                <span className="text-lg">📊</span>
-                                <span>Analysis Results</span>
-                              </summary>
-                              <div className="bg-white rounded-md p-3 border border-orange-200 shadow-inner">
-                                <pre className="whitespace-pre-wrap overflow-x-auto max-h-64 overflow-y-auto text-xs text-gray-800 leading-relaxed font-mono">
-                                  {job.result}
-                                </pre>
-                              </div>
-                            </details>
-                          </div>
-                        )}
                       </motion.div>
                     );
                   })}
