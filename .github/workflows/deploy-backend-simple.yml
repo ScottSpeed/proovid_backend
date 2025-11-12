@@ -1,4 +1,4 @@
-name: Deploy Backend (Simple & Fast)
+name: Deploy Backend & Worker (Simple & Fast)
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ env:
   AWS_REGION: eu-central-1
 
 jobs:
-  deploy:
+  deploy-backend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     
@@ -30,7 +30,7 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
 
-    - name: Build and Push
+    - name: Build and Push Backend
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: ${{ github.sha }}
@@ -40,10 +40,47 @@ jobs:
         docker push $ECR_REGISTRY/backend:latest
         docker push $ECR_REGISTRY/backend:$IMAGE_TAG
 
-    - name: Deploy to ECS
+    - name: Deploy Backend to ECS
       run: |
         aws ecs update-service \
           --cluster my-cluster \
           --service backend-service \
+          --force-new-deployment \
+          --region ${{ env.AWS_REGION }}
+
+  deploy-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Configure AWS
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and Push Worker
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        cd backend
+        docker build -f worker/Dockerfile -t $ECR_REGISTRY/worker:latest -t $ECR_REGISTRY/worker:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/worker:latest
+        docker push $ECR_REGISTRY/worker:$IMAGE_TAG
+
+    - name: Deploy Worker to ECS
+      run: |
+        aws ecs update-service \
+          --cluster my-cluster \
+          --service proovid-backend-worker \
           --force-new-deployment \
           --region ${{ env.AWS_REGION }}
