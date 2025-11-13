@@ -1775,10 +1775,9 @@ async def analyze_videos(
             session_id=session_id
         )
         
-        # Always enqueue to worker so every video goes through the same reliable queue
-        background_tasks.add_task(
-            start_worker_container, video.bucket, video.key, job_id, video.tool
-        )
+        # Enqueue to worker synchronously to guarantee SQS message creation before responding
+        # This avoids rare cases where background tasks may be dropped by upstream infrastructure
+        start_worker_container(video.bucket, video.key, job_id, video.tool)
         jobs.append(AnalyzeResponseJob(job_id=job_id, video=video))
     
     logger.info(f"Created {len(jobs)} jobs in session {session_id} for user {user_email}")
