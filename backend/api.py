@@ -1877,7 +1877,7 @@ def job_status(
     statuses: List[JobStatusItem] = []
     for job_id in request.job_ids:
         try:
-            resp = t.get_item(Key={"job_id": job_id})
+            resp = t.get_item(Key={"job_id": job_id}, ConsistentRead=True)
             item = resp.get("Item")
             if not item:
                 statuses.append(JobStatusItem(job_id=job_id, status="not_found", result=""))
@@ -1967,7 +1967,8 @@ async def get_my_jobs(
         resp = t.scan(
             FilterExpression="user_id = :uid",
             ExpressionAttributeValues={':uid': user_id},
-            Limit=limit
+            Limit=limit,
+            ConsistentRead=True
         )
         items = resp.get("Items", [])
         
