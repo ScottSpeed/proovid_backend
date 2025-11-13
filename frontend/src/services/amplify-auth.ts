@@ -61,7 +61,8 @@ class AmplifyAuthService {
   async isAuthenticated(): Promise<boolean> {
     try {
       const session = await fetchAuthSession();
-      return !!session.tokens?.accessToken;
+      // Consider authenticated only if ID token is present (backend expects ID token)
+      return !!session.tokens?.idToken;
     } catch (error) {
       return false;
     }

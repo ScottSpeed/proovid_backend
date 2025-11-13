@@ -1,4 +1,5 @@
 import { authService } from './amplify-auth';
+import { sessionService } from './session-service';
 
 const API_BASE_URL = 'https://api.proovid.ai';
 
@@ -6,6 +7,7 @@ export interface AnalyzeRequest {
   bucket: string;
   key: string;
   tool?: string;
+  session_id?: string;
 }
 
 export interface AnalyzeResponse {
@@ -82,10 +84,21 @@ export interface SessionJobsResponse {
 }
 
 class ApiService {
+  private handleUnauthorized(reason: 'no_token' | 'unauthorized' = 'unauthorized') {
+    try { sessionService.clearSession(); } catch {}
+    // Best-effort logout; ignore errors
+    authService.logout().finally(() => {
+      const redirectUrl = '/?auth=required' + (reason === 'no_token' ? '&reason=no_token' : '');
+      // Force redirect to login
+      window.location.href = redirectUrl;
+    });
+  }
   
   private async getAuthHeaders() {
     const token = await authService.getToken();
     if (!token) {
+      // Redirect to login on missing token
+      this.handleUnauthorized('no_token');
       throw new Error('No authentication token available');
     }
     
@@ -106,6 +119,9 @@ class ApiService {
       });
 
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          this.handleUnauthorized('unauthorized');
+        }
         throw new Error(`API call failed: ${response.status} ${response.statusText}`);
       }
 
@@ -122,7 +138,8 @@ class ApiService {
       console.log('[API] Starting analyzeVideo request:', {
         bucket: request.bucket,
         key: request.key,
-        tool: request.tool
+        tool: request.tool,
+        session_id: request.session_id
       });
 
       const response = await this.apiCall<any>('/analyze', 'POST', {
@@ -130,7 +147,8 @@ class ApiService {
           bucket: request.bucket,
           key: request.key,
           tool: request.tool || 'analyze_video_complete'
-        }]
+        }],
+        session_id: request.session_id
       });
 
       console.log('[API] analyzeVideo response:', response);
@@ -216,6 +234,30 @@ class ApiService {
     }
   }
 
+  // Create/Start an upload session
+  async startUploadSession(): Promise<{ session_id: string; s3_prefix: string }> {
+    const response = await this.apiCall<any>('/upload-session', 'POST');
+    return {
+      session_id: response.session_id,
+      s3_prefix: response.s3_prefix
+    };
+  }
+
+  // Get presigned upload URL (session-aware)
+  async getUploadUrl(params: { bucket: string; key: string; content_type: string; session_id?: string }): Promise<{ upload_url: string; bucket: string; key: string }> {
+    const response = await this.apiCall<any>('/get-upload-url', 'POST', {
+      bucket: params.bucket,
+      key: params.key,
+      content_type: params.content_type,
+      session_id: params.session_id
+    });
+    return {
+      upload_url: response.upload_url,
+      bucket: response.bucket,
+      key: response.key
+    };
+  }
+
   // Get user's sessions (upload batches)
   async getMySessions(): Promise<SessionsResponse> {
     try {
@@ -243,7 +285,8 @@ class ApiService {
     try {
       const response = await this.apiCall<any>('/chat', 'POST', {
         message: request.message,
-        conversation_id: request.conversation_id
+        conversation_id: request.conversation_id,
+        session_id: request.session_id
       });
 
       return {

@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import NavigationMenu from '../components/NavigationMenu';
 import proovidLogo from '../assets/proovid-03.jpg';
 import { apiService } from '../services/api-service';
+import { sessionService } from '../services/session-service';
 import type { JobStatus, UserJob } from '../services/api-service';
 import type { UploadResult } from '../services/s3-upload';
 import './ChatBotScreen.css';
@@ -18,6 +19,7 @@ interface LocationState {
   completedJobs?: UserJob[];
   uploadedFiles?: File[];
   isFromUpload?: boolean;
+  session_id?: string;
 }
 
 interface Message {
@@ -47,6 +49,7 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
   const uploadedFiles = state?.uploadedFiles || [];
   const jobIds = state?.jobIds || [];
   const isFromUpload = state?.isFromUpload || false;
+  const initialSessionId = state?.session_id || sessionService.getSessionId() || undefined;
   
   // State for completed jobs (updated by polling)
   const [completedJobs, setCompletedJobs] = useState<UserJob[]>(state?.completedJobs || []);
@@ -64,6 +67,21 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
       isFromUpload
     });
   }, []); // Empty deps = runs once on mount
+
+  useEffect(() => {
+    // Removed optimistic status updates; rely solely on API-reported statuses
+    if (jobIds && jobIds.length) {
+      setJobStatuses(prev => {
+        const next = { ...prev };
+        jobIds.forEach(jid => {
+          if (!next[jid]) {
+            next[jid] = { job_id: jid, status: 'pending', result: '' } as JobStatus;
+          }
+        });
+        return next;
+      });
+    }
+  }, [jobIds]);
 
   useEffect(() => {
     // Add welcome message based on context
@@ -116,10 +134,17 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
           
           const statusMap: { [jobId: string]: JobStatus } = {};
           
+          const normalize = (s?: string) => {
+            const v = (s || '').toLowerCase();
+            if (v === 'done') return 'completed';
+            if (v === 'error') return 'failed';
+            if (v === 'processing') return 'running';
+            return (['pending','running','completed','failed','queued'].includes(v) ? v : 'pending') as any;
+          };
           ourJobs.forEach((job: UserJob) => {
             statusMap[job.job_id] = {
               job_id: job.job_id,
-              status: job.status as any, // UserJob.status is string, JobStatus expects specific values
+              status: normalize(job.status) as any,
               result: job.result || ''
             };
           });
@@ -131,11 +156,14 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
             job.status === 'completed' || job.status === 'failed'
           );
           
-          // Update completedJobs state with ANY jobs that have s3_key (even if still processing)
-          const jobsWithVideo = ourJobs.filter((job: UserJob) => job.s3_key);
-          if (jobsWithVideo.length > 0) {
-            console.log('[ChatBot] Setting completedJobs (jobs with s3_key):', jobsWithVideo);
-            setCompletedJobs(jobsWithVideo);
+          // Update completedJobs state with jobs that are completed/done only (avoid duplicates with uploaded list)
+          const completed = ourJobs.filter((job: UserJob) => {
+            const st = (job.status || '').toLowerCase();
+            return st === 'completed' || st === 'done';
+          });
+          if (completed.length > 0) {
+            console.log('[ChatBot] Setting completedJobs (completed only):', completed);
+            setCompletedJobs(completed);
           }
           
           if (allCompleted) {
@@ -199,8 +227,8 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
     setIsTyping(true);
 
     try {
-      // Send message to API with session_id (first job ID) for context
-      const session_id = jobIds.length > 0 ? jobIds[0] : undefined;
+      // Send message to API with session_id for context (persisted session preferred)
+      const session_id = initialSessionId || (jobIds.length > 0 ? jobIds[0] : undefined);
       const response = await apiService.chat({
         message: inputMessage,
         conversation_id: conversationId,
@@ -333,9 +361,15 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                   {uploadedFiles.map((file, index) => {
                     const jobId = jobIds[index];
                     const status = jobStatuses[jobId];
-                    const statusKey = (status?.status || 'pending').toLowerCase();
-                    const statusClass = statusKey === 'done' ? 'completed' : statusKey;
-                    const statusLabel = (status?.status || 'pending').toUpperCase();
+                    const statusKeyRaw = (status?.status || 'pending').toLowerCase();
+                    const statusKey = statusKeyRaw === 'done' ? 'completed' : statusKeyRaw;
+                    const statusClass = statusKey;
+                    const statusLabel = statusKey.toUpperCase();
+
+                    // Hide items that are already completed from Uploaded Files list to avoid duplicates
+                    if (statusKey === 'completed') {
+                      return null;
+                    }
                     
                     return (
                       <motion.div
@@ -382,9 +416,9 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                   {completedJobs.map((job, index) => {
                     const matchingUpload = (uploadResults || []).find(u => u.key === job.s3_key) || (uploadResults || [])[index];
                     const fileName = job.filename || (job.s3_key ? job.s3_key.split('/').pop() : `Analysis ${index + 1}`);
-                    const status = job.status || 'pending';
-                    const statusKey = (status || 'pending').toLowerCase();
-                    const statusClass = statusKey === 'done' ? 'completed' : statusKey;
+                    const statusRaw = job.status || 'pending';
+                    const statusKey = (statusRaw || 'pending').toLowerCase() === 'done' ? 'completed' : (statusRaw || 'pending').toLowerCase();
+                    const statusClass = statusKey;
                     const isRunning = statusKey === 'running' || statusKey === 'processing';
                     const isCompleted = statusKey === 'completed' || statusKey === 'done';
                     
@@ -402,7 +436,7 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
                               {isCompleted ? '✅' : isRunning ? '⏳' : statusKey === 'failed' ? '❌' : '📊'} {fileName}
                             </h4>
                             <div className="file-item-sub">
-                              <span className={`file-status ${statusClass}`}>{status.toUpperCase()}</span>
+                              <span className={`file-status ${statusClass}`}>{statusKey.toUpperCase()}</span>
                             </div>
                           </div>
                           
