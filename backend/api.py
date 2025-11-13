@@ -416,6 +416,54 @@ def save_job_entry(job_id: str, status: str, result=None, video=None, created_at
     t.put_item(Item=item)
 
 
+def session_status_message(user_id: Optional[str], session_id: Optional[str]) -> Optional[str]:
+    """Summarize current session job statuses for user. Returns a human-friendly string or None.
+
+    This helps the chatbot inform users while analyses are still running.
+    """
+    if not user_id or not session_id:
+        return None
+    try:
+        t = job_table()
+        resp = t.scan(
+            FilterExpression="user_id = :uid AND session_id = :sid",
+            ExpressionAttributeValues={':uid': user_id, ':sid': session_id}
+        )
+        items = resp.get("Items", [])
+        if not items:
+            return None
+        total = len(items)
+        def norm_status(s: Any) -> str:
+            return str(s or '').lower()
+        running_like = {"queued", "running", "processing", "pending"}
+        done_like = {"completed", "done"}
+        failed_like = {"failed", "error"}
+        running = sum(1 for it in items if norm_status(it.get("status")) in running_like)
+        completed = sum(1 for it in items if norm_status(it.get("status")) in done_like)
+        failed = sum(1 for it in items if norm_status(it.get("status")) in failed_like)
+
+        # Only produce message when there are active jobs or nothing completed yet
+        if running > 0 or completed == 0:
+            # Show up to 3 job lines with short ids and filenames
+            lines = []
+            for it in items[:3]:
+                jid = str(it.get("job_id", ""))
+                sid = jid[:8] + "..." if jid else "unknown"
+                key = it.get("s3_key") or ""
+                fname = key.split("/")[-1] if isinstance(key, str) and "/" in key else (key or "video")
+                st = it.get("status", "pending").upper()
+                lines.append(f"• {sid} — {fname} [{st}]")
+            msg = (
+                f"🔧 Ihre Analyse läuft: {running} aktiv, {completed} fertig, {failed} fehlgeschlagen (insgesamt {total}).\n" 
+                f"Sobald eine Analyse abgeschlossen ist, kann ich Inhalte finden.\n\n"
+                + "\n".join(lines)
+            )
+            return msg
+        return None
+    except Exception:
+        return None
+
+
 # CORS
 # --- CORS robust: unterstützt mehrere Domains, CloudFront und eigene Subdomain ---
 import re
@@ -792,6 +840,14 @@ async def call_bedrock_chatbot(message: str, user_id: str = None, session_id: st
             print(f"[DIAGNOSTIC] RAG returned results, skipping Bedrock")
             return rag_result
         else:
+            # Before falling back, provide a session-aware status update if analyses are still running
+            try:
+                status_msg = session_status_message(user_id=user_id, session_id=session_id)
+                if status_msg:
+                    print(f"[DIAGNOSTIC] Returning session status message due to no RAG matches")
+                    return status_msg
+            except Exception as _e:
+                print(f"[DIAGNOSTIC] session status message failed: {_e}")
             print(f"[DIAGNOSTIC] RAG found no results, falling back to Bedrock")
     
     try:
