@@ -203,6 +203,30 @@ async def start_upload_session(current_user: Dict[str, Any] = Depends(get_curren
     prefix = f"users/{user}/sessions/{sid}/"
     return StartSessionResponse(session_id=sid, s3_prefix=prefix)
 
+# Explicit CORS preflight for /upload-session
+@app.options("/upload-session")
+async def options_upload_session(request: Request):
+    origin = request.headers.get("origin", "*")
+    return Response(status_code=200, headers={
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": request.headers.get("access-control-request-headers", "authorization, content-type"),
+        "Access-Control-Allow-Credentials": "true",
+        "Vary": "Origin"
+    })
+
+# Explicit CORS preflight for /get-upload-url
+@app.options("/get-upload-url")
+async def options_get_upload_url(request: Request):
+    origin = request.headers.get("origin", "*")
+    return Response(status_code=200, headers={
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": request.headers.get("access-control-request-headers", "authorization, content-type"),
+        "Access-Control-Allow-Credentials": "true",
+        "Vary": "Origin"
+    })
+
 
 # --- Configuration loader ---
 def load_config() -> dict:
