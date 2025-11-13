@@ -5,6 +5,7 @@ import NavigationMenu from '../components/NavigationMenu';
 import proovidLogo from '../assets/proovid-03.jpg';
 import { s3UploadService } from '../services/s3-upload';
 import { apiService } from '../services/api-service';
+import { sessionService } from '../services/session-service';
 import type { UploadResult } from '../services/s3-upload';
 
 
@@ -58,80 +59,67 @@ const FileUploadScreen: React.FC<FileUploadScreenProps> = ({ onLogout }) => {
     setIsUploading(true);
     
     try {
-      // Collect job IDs locally to avoid React state timing issues
-      const localJobIds: string[] = [];
-      const localUploadResults: UploadResult[] = [];
-      
-      // Upload each file to S3 and start analysis
-      for (const file of selectedFiles) {
-        const fileName = file.name;
-        
-        console.log(`Starting upload for ${fileName}`);
-        
-        // Upload to S3 with progress tracking
-        const uploadResult = await s3UploadService.uploadVideo(file, (progress) => {
-          setUploadProgress(prev => ({ ...prev, [fileName]: progress.percentage }));
-        });
-        
-        // Store upload result
-        setUploadResults(prev => ({ ...prev, [fileName]: uploadResult }));
-        
-        if (uploadResult.success) {
-          console.log(`Upload successful for ${fileName}, starting real analysis...`);
-          localUploadResults.push(uploadResult);
-          
-          // Start real video analysis via backend API (with one retry on failure)
-          let analysisResult = await apiService.analyzeVideo({
-            bucket: uploadResult.bucket,
-            key: uploadResult.key,
-            tool: 'analyze_video_complete'
-          });
+      // Ensure we have a session for this upload batch
+      const { session_id } = await sessionService.ensureSession();
+      // Upload all files to S3 in parallel and collect results
+      const uploadResults = await Promise.all(selectedFiles.map(file =>
+        s3UploadService.uploadVideo(
+          file,
+          (progress) => setUploadProgress(prev => ({ ...prev, [file.name]: progress.percentage })),
+          { session_id }
+        )
+      ));
 
-          if (!analysisResult.success) {
-            console.warn(`analyzeVideo failed for ${fileName}, retrying once...`);
-            // small backoff
-            await new Promise(res => setTimeout(res, 500));
-            analysisResult = await apiService.analyzeVideo({
-              bucket: uploadResult.bucket,
-              key: uploadResult.key,
-              tool: 'analyze_video_complete'
-            });
-          }
-          
-          if (analysisResult.success && analysisResult.job_id) {
-            setAnalysisJobs(prev => ({ ...prev, [fileName]: analysisResult.job_id! }));
-            localJobIds.push(analysisResult.job_id);
-            console.log(`Real analysis started for ${fileName}, job ID: ${analysisResult.job_id}`);
-          } else {
-            console.error(`Failed to start analysis for ${fileName}:`, analysisResult.error);
-            // Fallback job ID for continuation
-            const fallbackId = `fallback-${Date.now()}`;
-            setAnalysisJobs(prev => ({ ...prev, [fileName]: fallbackId }));
-            localJobIds.push(fallbackId);
-          }
-        } else {
-          console.error(`Upload failed for ${fileName}:`, uploadResult.error);
-        }
+      // Persist per-file results in state for UI
+      const resultsMap: { [key: string]: UploadResult } = {};
+      uploadResults.forEach((res, idx) => { resultsMap[selectedFiles[idx].name] = res; });
+      setUploadResults(prev => ({ ...prev, ...resultsMap }));
+
+      // Filter successes for analysis
+      const successful = uploadResults
+        .map((r, idx) => ({ r, idx }))
+        .filter(x => x.r.success);
+
+      if (successful.length === 0) {
+        console.error('All uploads failed; aborting analysis');
+        setIsUploading(false);
+        return;
       }
-      
-      // Navigate directly to chat screen after uploads (use local data to avoid state timing issues)
-      console.log('Navigation data:', {
-        jobIds: localJobIds,
-        uploadResults: localUploadResults,
-        selectedFiles
+
+      // Build batch analyze request
+      const analyzePayload = successful.map(x => ({
+        bucket: x.r.bucket,
+        key: x.r.key,
+        tool: 'analyze_video_complete',
+        session_id
+      }));
+
+      // Call batch analyze once for all videos
+      const batch = await apiService.analyzeVideos(analyzePayload, session_id);
+
+      // Extract job IDs (fallback placeholders if missing)
+      const jobIds: string[] = (batch.success && batch.job_ids && batch.job_ids.length > 0)
+        ? batch.job_ids
+        : successful.map((_, i) => `fallback-${Date.now()}-${i}`);
+
+      // Map filenames to job IDs for local display
+      const nameToJob: { [key: string]: string } = {};
+      successful.forEach((x, i) => {
+        const name = selectedFiles[x.idx].name;
+        nameToJob[name] = jobIds[i] || `fallback-${Date.now()}-${i}`;
       });
-      
-      // Navigate with real job IDs
+      setAnalysisJobs(prev => ({ ...prev, ...nameToJob }));
+
+      const localUploadResults = successful.map(x => uploadResults[x.idx]).filter(Boolean) as UploadResult[];
+
+      // Navigate to chat with all job IDs
       navigate('/chat', { 
         state: { 
-          jobIds: localJobIds.length > 0 ? localJobIds : selectedFiles.map((_, i) => `mock-job-${Date.now()}-${i}`),
-          uploadResults: localUploadResults.length > 0 ? localUploadResults : selectedFiles.map(file => ({
-            success: true,
-            bucket: 'christian-aws-development',
-            key: `analysis_${new Date().toISOString().slice(0,19).replace(/[:-]/g, '-')}_${Date.now()}/${file.name}`
-          })),
+          jobIds: jobIds,
+          uploadResults: localUploadResults,
           uploadedFiles: selectedFiles,
-          isFromUpload: true
+          isFromUpload: true,
+          session_id
         }
       });
       

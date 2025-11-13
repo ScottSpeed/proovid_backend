@@ -17,6 +17,13 @@ export interface AnalyzeResponse {
   error?: string;
 }
 
+export interface AnalyzeBatchResponse {
+  success: boolean;
+  jobs?: Array<{ job_id: string; video: { bucket: string; key: string; tool?: string } }>;
+  job_ids?: string[];
+  error?: string;
+}
+
 export interface JobStatus {
   job_id: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'not_found';
@@ -167,6 +174,35 @@ class ApiService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Analysis failed to start'
+      };
+    }
+  }
+
+  // Start analysis for multiple videos in one request
+  async analyzeVideos(requests: AnalyzeRequest[], session_id?: string): Promise<AnalyzeBatchResponse> {
+    try {
+      const payload = {
+        videos: requests.map(r => ({
+          bucket: r.bucket,
+          key: r.key,
+          tool: r.tool || 'analyze_video_complete'
+        })),
+        session_id
+      };
+
+      console.log('[API] Starting analyzeVideos batch:', payload.videos.length);
+      const response = await this.apiCall<any>('/analyze', 'POST', payload);
+      const jobs = Array.isArray(response.jobs) ? response.jobs : [];
+      return {
+        success: true,
+        jobs,
+        job_ids: jobs.map((j: any) => j.job_id).filter(Boolean)
+      };
+    } catch (error) {
+      console.error('[API] analyzeVideos ERROR:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Batch analysis failed to start'
       };
     }
   }
