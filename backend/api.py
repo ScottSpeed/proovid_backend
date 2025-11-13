@@ -427,9 +427,10 @@ def session_status_message(user_id: Optional[str], session_id: Optional[str]) ->
     try:
         t = job_table()
         resp = t.scan(
-            FilterExpression="user_id = :uid AND session_id = :sid",
-            ExpressionAttributeValues={':uid': user_id, ':sid': session_id}
-        )
+                FilterExpression="user_id = :uid AND session_id = :sid",
+                ExpressionAttributeValues={':uid': user_id, ':sid': session_id},
+                ConsistentRead=True
+            )
         items = resp.get("Items", [])
         if not items:
             return None
@@ -899,7 +900,8 @@ async def call_bedrock_chatbot(message: str, user_id: str = None, session_id: st
                 
                 print(f"[DIAGNOSTIC] Job {job_id}: status='{status}', has_result={bool(result)}")
                 
-                if status == "done" and result:
+                # Accept both historic 'done' and newer 'completed' statuses
+                if (status == "done" or status == "completed") and result:
                     print(f"[DIAGNOSTIC] Processing completed job: {job_id}")
                     try:
                         # Parse video data - handle both nested and flat structure  
