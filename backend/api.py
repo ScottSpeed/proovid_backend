@@ -593,10 +593,11 @@ async def emergency_migrate_data(vector_db):
         table = dynamodb.Table('proov_jobs')
         
         # Scan for completed jobs with results
+        # Accept both historic "done" and newer "completed" statuses
         resp = table.scan(
-            FilterExpression="attribute_exists(#result) AND #status = :status",
+            FilterExpression="attribute_exists(#result) AND (#status = :status_done OR #status = :status_completed)",
             ExpressionAttributeNames={"#result": "result", "#status": "status"},
-            ExpressionAttributeValues={":status": "done"},
+            ExpressionAttributeValues={":status_done": "done", ":status_completed": "completed"},
             Limit=15  # Increased limit for better migration
         )
         jobs = resp.get("Items", [])
@@ -613,7 +614,7 @@ async def emergency_migrate_data(vector_db):
                 s3_key = job.get('s3_key', '')
                 s3_bucket = job.get('s3_bucket', 'proovid-results')
                 
-                if status == "done" and result and job_id and s3_key:
+                if status in ("done", "completed") and result and job_id and s3_key:
                     # Parse analysis results
                     if isinstance(result, str):
                         analysis_results = json.loads(result)
@@ -687,7 +688,8 @@ async def basic_rag_fallback(query: str) -> str:
             result_raw = job.get('result', {})
             result = result_raw.get('S', result_raw) if isinstance(result_raw, dict) else result_raw if result_raw else ''
             
-            if status == "done" and result:
+            # Accept both historic "done" and newer "completed" statuses
+            if status in ("done", "completed") and result:
                 try:
                     # Parse video info
                     video_info_raw = job.get("video_info", job.get("video", {}))
@@ -836,7 +838,8 @@ async def call_bedrock_chatbot(message: str, user_id: str = None, session_id: st
     if any(term in message_lower for term in rag_triggers):
         print(f"[DIAGNOSTIC] RAG-first approach triggered for: {message} (user_id: {user_id}, session_id: {session_id})")
         rag_result = await smart_rag_search(message, user_id=user_id, session_id=session_id)
-        if "No matches found" not in rag_result:
+        # Consider both EN and DE variants of 'no matches'
+        if all(phrase not in rag_result.lower() for phrase in ["no matches found", "keine passenden", "keine treffer"]):
             print(f"[DIAGNOSTIC] RAG returned results, skipping Bedrock")
             return rag_result
         else:
@@ -870,11 +873,13 @@ async def call_bedrock_chatbot(message: str, user_id: str = None, session_id: st
                     "#status": "status",
                     "#user_id": "user_id"
                 }
+                # Accept both historic "done" and newer "completed" statuses
                 expr_values = {
-                    ":status": "done",
+                    ":status_done": "done",
+                    ":status_completed": "completed",
                     ":uid": user_id
                 }
-                filter_expr = "attribute_exists(#result) AND #status = :status AND #user_id = :uid"
+                filter_expr = "attribute_exists(#result) AND (#status = :status_done OR #status = :status_completed) AND #user_id = :uid"
                 if session_id:
                     expr_names["#session_id"] = "session_id"
                     expr_values[":sid"] = session_id
@@ -1736,12 +1741,43 @@ def start_worker_container(bucket: str, key: str, job_id: str, tool: str):
         "agent_args": agent_args,
     }
     logger.info("Enqueuing job %s to SQS %s with tool %s and file_url %s", job_id, sqs_url, tool, file_url)
-    try:
-        resp = sqs.send_message(QueueUrl=sqs_url, MessageBody=json.dumps(body))
-        message_id = resp.get("MessageId", "")
-        logger.info("Successfully enqueued job %s to SQS (MessageId=%s)", job_id, message_id)
+    # Simple, robust retry (up to 2 attempts) to improve enqueue reliability
+    last_exc = None
+    message_id = ""
+    for attempt in range(1, 3):
+        try:
+            resp = sqs.send_message(QueueUrl=sqs_url, MessageBody=json.dumps(body))
+            message_id = resp.get("MessageId", "")
+            logger.info("Successfully enqueued job %s to SQS (MessageId=%s) on attempt %d", job_id, message_id, attempt)
+            break
+        except Exception as e:
+            last_exc = e
+            logger.warning("Enqueue attempt %d failed for job %s: %s", attempt, job_id, e)
+            time.sleep(0.5)
+    if not message_id:
+        # All attempts failed; record and re-raise
+        logger.exception("Failed to send SQS message for job %s after retries: %s", job_id, last_exc)
+        try:
+            table = boto3.resource("dynamodb", region_name=cfg("AWS_DEFAULT_REGION", "eu-central-1"), config=boto3_config).Table(cfg("JOB_TABLE", "proov_jobs"))
+            now_ts = int(time.time())
+            table.update_item(
+                Key={"job_id": job_id},
+                UpdateExpression=(
+                    "SET enqueue_last_error = :err, enqueue_error_at = :ts, "
+                    "enqueue_attempts = if_not_exists(enqueue_attempts, :zero) + :one"
+                ),
+                ExpressionAttributeValues={
+                    ":err": str(last_exc),
+                    ":ts": now_ts,
+                    ":zero": 0,
+                    ":one": 1,
+                },
+            )
+        except Exception:
+            logger.exception("Failed to write enqueue error for job %s", job_id)
+        raise last_exc if last_exc else Exception("Failed to enqueue SQS message")
 
-        # Mark job as enqueued and record MessageId for traceability
+    # Mark job as enqueued and record MessageId for traceability
         table = boto3.resource("dynamodb", region_name=cfg("AWS_DEFAULT_REGION", "eu-central-1"), config=boto3_config).Table(cfg("JOB_TABLE", "proov_jobs"))
         now_ts = int(time.time())
         table.update_item(
@@ -1757,28 +1793,7 @@ def start_worker_container(bucket: str, key: str, job_id: str, tool: str):
                 ":one": 1,
             },
         )
-    except Exception as e:
-        logger.exception("Failed to send SQS message for job %s: %s", job_id, e)
-        # Record enqueue error so we can requeue later
-        try:
-            table = boto3.resource("dynamodb", region_name=cfg("AWS_DEFAULT_REGION", "eu-central-1"), config=boto3_config).Table(cfg("JOB_TABLE", "proov_jobs"))
-            now_ts = int(time.time())
-            table.update_item(
-                Key={"job_id": job_id},
-                UpdateExpression=(
-                    "SET enqueue_last_error = :err, enqueue_error_at = :ts, "
-                    "enqueue_attempts = if_not_exists(enqueue_attempts, :zero) + :one"
-                ),
-                ExpressionAttributeValues={
-                    ":err": str(e),
-                    ":ts": now_ts,
-                    ":zero": 0,
-                    ":one": 1,
-                },
-            )
-        except Exception:
-            logger.exception("Failed to write enqueue error for job %s", job_id)
-        raise
+    
 
 
 # --- Analyze endpoint: start workers in background ---
