@@ -1786,23 +1786,22 @@ def start_worker_container(bucket: str, key: str, job_id: str, tool: str):
         except Exception:
             logger.exception("Failed to write enqueue error for job %s", job_id)
         raise last_exc if last_exc else Exception("Failed to enqueue SQS message")
-
-    # Mark job as enqueued and record MessageId for traceability
-        table = boto3.resource("dynamodb", region_name=cfg("AWS_DEFAULT_REGION", "eu-central-1"), config=boto3_config).Table(cfg("JOB_TABLE", "proov_jobs"))
-        now_ts = int(time.time())
-        table.update_item(
-            Key={"job_id": job_id},
-            UpdateExpression=(
-                "SET sqs_message_id = :mid, enqueued_at = :ts, "
-                "enqueue_attempts = if_not_exists(enqueue_attempts, :zero) + :one"
-            ),
-            ExpressionAttributeValues={
-                ":mid": message_id,
-                ":ts": now_ts,
-                ":zero": 0,
-                ":one": 1,
-            },
-        )
+    # Mark job as enqueued and record MessageId for traceability (success path)
+    table = boto3.resource("dynamodb", region_name=cfg("AWS_DEFAULT_REGION", "eu-central-1"), config=boto3_config).Table(cfg("JOB_TABLE", "proov_jobs"))
+    now_ts = int(time.time())
+    table.update_item(
+        Key={"job_id": job_id},
+        UpdateExpression=(
+            "SET sqs_message_id = :mid, enqueued_at = :ts, "
+            "enqueue_attempts = if_not_exists(enqueue_attempts, :zero) + :one"
+        ),
+        ExpressionAttributeValues={
+            ":mid": message_id,
+            ":ts": now_ts,
+            ":zero": 0,
+            ":one": 1,
+        },
+    )
     
 
 

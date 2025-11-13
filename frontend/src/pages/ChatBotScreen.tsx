@@ -151,10 +151,11 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
           
           setJobStatuses(statusMap);
           
-          // Check if all jobs are completed
-          const allCompleted = ourJobs.every((job: UserJob) => 
-            job.status === 'completed' || job.status === 'failed'
-          );
+          // Check if all jobs are completed (only if we actually received our jobs)
+          const allCompleted = ourJobs.length > 0 && ourJobs.every((job: UserJob) => {
+            const st = (job.status || '').toLowerCase();
+            return st === 'completed' || st === 'done' || st === 'failed';
+          });
           
           // Update completedJobs state with jobs that are completed/done only (avoid duplicates with uploaded list)
           const completed = ourJobs.filter((job: UserJob) => {
