@@ -1976,7 +1976,12 @@ async def get_my_jobs(
                 "created_at": it.get("created_at"),
                 "updated_at": it.get("updated_at"),
                 "video": it.get("video"),
-                "s3_key": it.get("s3_key")
+                "s3_key": it.get("s3_key"),
+                # Enqueue diagnostics (non-sensitive)
+                "sqs_message_id": it.get("sqs_message_id"),
+                "enqueued_at": it.get("enqueued_at"),
+                "enqueue_attempts": it.get("enqueue_attempts"),
+                "enqueue_last_error": it.get("enqueue_last_error")
             }
             out.append(job_entry)
         
@@ -1985,6 +1990,53 @@ async def get_my_jobs(
     except Exception as e:
         logger.exception(f"get_my_jobs failed for user {user_id}")
         raise HTTPException(status_code=500, detail=f"Error retrieving jobs: {e}")
+
+
+@app.post("/jobs/requeue")
+async def requeue_single_job(
+    job_id: str = Query(..., description="Job ID to requeue"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Requeue one of the current user's jobs back to the worker queue.
+
+    Safety: verifies ownership by user_id. Useful if a job got stuck in queued.
+    """
+    try:
+        t = job_table()
+        resp = t.get_item(Key={"job_id": job_id})
+        item = resp.get("Item")
+        if not item:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        user_id = current_user.get('sub') or current_user.get('username')
+        if item.get("user_id") and item.get("user_id") != user_id:
+            raise HTTPException(status_code=403, detail="Not your job")
+
+        bucket = item.get("s3_bucket")
+        key = item.get("s3_key")
+        tool = None
+        video_data = item.get("video")
+        if isinstance(video_data, dict):
+            tool = video_data.get("tool")
+        elif isinstance(video_data, str):
+            try:
+                vd = json.loads(video_data)
+                tool = vd.get("tool")
+            except Exception:
+                pass
+        if not tool:
+            tool = "analyze_video_complete"
+
+        if not bucket or not key:
+            raise HTTPException(status_code=400, detail="Job missing S3 info")
+
+        start_worker_container(bucket, key, job_id, tool)
+        return {"status": "requeued", "job_id": job_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to requeue job %s", job_id)
+        raise HTTPException(status_code=500, detail=f"Requeue failed: {e}")
 
 
 @app.get("/my-sessions")
