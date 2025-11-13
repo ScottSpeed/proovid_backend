@@ -540,6 +540,26 @@ async def smart_rag_search(query: str, user_id: str = None, session_id: str = No
             print(f"[VECTOR-RAG] FORCE MIGRATION: Running data migration...")
             await emergency_migrate_data(vector_db)
             
+            # Build analysis header from DynamoDB counts (user + optional session)
+            session_analyzed = 0
+            user_analyzed = 0
+            try:
+                ddb = boto3.resource('dynamodb', region_name=cfg('AWS_DEFAULT_REGION', 'eu-central-1'), config=boto3_config)
+                t = ddb.Table(cfg('JOB_TABLE', 'proov_jobs'))
+                # Count for user (done/completed and has result)
+                fe_all = Attr('result').exists() & (Attr('status').eq('done') | Attr('status').eq('completed')) & Attr('user_id').eq(user_id)
+                resp_all = t.scan(FilterExpression=fe_all, ConsistentRead=True)
+                user_analyzed = len(resp_all.get('Items', []))
+                if session_id:
+                    fe_sess = fe_all & Attr('session_id').eq(session_id)
+                    resp_sess = t.scan(FilterExpression=fe_sess, ConsistentRead=True)
+                    session_analyzed = len(resp_sess.get('Items', []))
+            except Exception as e_count:
+                print(f"[VECTOR-RAG] Count header failed: {e_count}")
+
+            # Prefer session filter when it has results; otherwise fall back to all user videos
+            effective_session_id = session_id if session_analyzed > 0 else None
+
             # CHECK: Try search after migration (with user_id filter)
             test_results = vector_db.semantic_search("BMW", limit=1, user_id=user_id)
             print(f"[VECTOR-RAG] After migration: {len(test_results)} BMW results found for user {user_id}")
@@ -550,7 +570,7 @@ async def smart_rag_search(query: str, user_id: str = None, session_id: str = No
             chatbot = CostOptimizedChatBot(vector_db)
             
             # 🔒 CRITICAL: Perform semantic search with user_id AND session_id for multi-tenant isolation
-            chat_response = chatbot.chat(query, context_limit=5, user_id=user_id, session_id=session_id)
+            chat_response = chatbot.chat(query, context_limit=5, user_id=user_id, session_id=effective_session_id)
             
             # Extract response
             response_text = chat_response.get("response", "")
@@ -558,7 +578,16 @@ async def smart_rag_search(query: str, user_id: str = None, session_id: str = No
             from_cache = chat_response.get("from_cache", False)
             
             # Add debug info for development
-            debug_info = f"\n\n🎯 **PROFESSIONAL RAG CHATBOT:**\n"
+            header_info = ""
+            if user_analyzed or session_analyzed:
+                if session_id:
+                    if session_analyzed > 0:
+                        header_info = f"📊 Found {session_analyzed} analyzed video(s) in this session; {user_analyzed} total for your account.\n\n"
+                    else:
+                        header_info = f"📊 No analyzed videos in this session yet; using {user_analyzed} analyzed video(s) in your account.\n\n"
+                else:
+                    header_info = f"📊 Found {user_analyzed} analyzed video(s) in your account.\n\n"
+            debug_info = header_info + f"🎯 **PROFESSIONAL RAG CHATBOT:**\n"
             debug_info += f"• Chatbot found {len(matched_videos)} matches\n"
             debug_info += f"• Response cached: {from_cache}\n"
             debug_info += f"• Query processed by: Professional Vector DB RAG\n"
@@ -869,18 +898,26 @@ async def call_bedrock_chatbot(message: str, user_id: str = None, session_id: st
 
             # 🔒 CRITICAL: Filter by user_id (and optional session_id) using proper condition expressions
             if user_id:
-                fe = Attr('result').exists() & (Attr('status').eq('done') | Attr('status').eq('completed')) & Attr('user_id').eq(user_id)
+                fe_base = Attr('result').exists() & (Attr('status').eq('done') | Attr('status').eq('completed')) & Attr('user_id').eq(user_id)
+                items = []
+                session_items = []
                 if session_id:
-                    fe = fe & Attr('session_id').eq(session_id)
-                resp = t.scan(FilterExpression=fe, Limit=20)
-                logger.info(f"🔒 DDB scan: user_id={user_id}, session_id={session_id}, items={len(resp.get('Items', []))}")
+                    resp_sess = t.scan(FilterExpression=fe_base & Attr('session_id').eq(session_id), Limit=50, ConsistentRead=True)
+                    session_items = resp_sess.get('Items', [])
+                if session_items:
+                    items = session_items
+                else:
+                    resp_all = t.scan(FilterExpression=fe_base, Limit=50, ConsistentRead=True)
+                    items = resp_all.get('Items', [])
+                logger.info(f"🔒 DDB scan: user_id={user_id}, session_id={session_id}, session_items={len(session_items)}, total_items={len(items)}")
             else:
                 # Fallback without user filter (less secure)
                 fe = Attr('result').exists() & (Attr('status').eq('done') | Attr('status').eq('completed'))
-                resp = t.scan(FilterExpression=fe, Limit=100)
+                resp = t.scan(FilterExpression=fe, Limit=100, ConsistentRead=True)
                 logger.warning("⚠️ DynamoDB scan WITHOUT user_id filter - not recommended!")
+                items = resp.get('Items', [])
             
-            jobs = resp.get("Items", [])
+            jobs = items
             
             print(f"[DIAGNOSTIC] DynamoDB scan returned {len(jobs)} jobs for user {user_id}")
             
@@ -995,9 +1032,21 @@ async def call_bedrock_chatbot(message: str, user_id: str = None, session_id: st
                         print(f"[DIAGNOSTIC] Error parsing job {job_id}: {e}")
                         continue
             
+            # Create counts and header for ChatBot
+            total_count = len(jobs)
+            session_count = sum(1 for j in jobs if (j.get('session_id') == session_id)) if session_id else 0
+            analysis_header = ""
+            if session_id:
+                if session_count > 0:
+                    analysis_header = f"\n\nSUMMARY: Found {session_count} analyzed video(s) in this session; {total_count} total for your account.\n"
+                else:
+                    analysis_header = f"\n\nSUMMARY: No analyzed videos in this session yet; using {total_count} analyzed video(s) in your account.\n"
+            else:
+                analysis_header = f"\n\nSUMMARY: Found {total_count} analyzed video(s) in your account.\n"
+
             # Create context for ChatBot
             if completed_jobs:
-                video_context = f"\n\nUSER'S ANALYZED VIDEOS ({len(completed_jobs)} videos):\n"
+                video_context = analysis_header + f"\nUSER'S ANALYZED VIDEOS ({len(completed_jobs)} videos):\n"
                 for i, video in enumerate(completed_jobs[:5], 1):  # Limit to 5 videos
                     video_context += f"\n{i}. Video: {video['name']}"
                     if video['labels']:
@@ -1015,7 +1064,7 @@ async def call_bedrock_chatbot(message: str, user_id: str = None, session_id: st
                 
                 video_context += f"\n\nThe user can ask questions about these {len(completed_jobs)} analyzed videos."
             else:
-                video_context = "\n\nUSER'S ANALYZED VIDEOS: No completed video analysis found. User should upload and analyze videos first."
+                video_context = analysis_header + "\nUSER'S ANALYZED VIDEOS: No completed video analysis found. User should upload and analyze videos first."
                 
         except Exception as e:
             logger.warning(f"Failed to fetch video analysis data: {e}")
