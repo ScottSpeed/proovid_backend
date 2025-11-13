@@ -128,12 +128,11 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
         // Reset error count on success
         errorCount = 0;
         
-        if (result.jobs && result.jobs.length > 0) {
-          // Filter to only our job IDs
+        if (result.jobs) {
+          // Filter to our job IDs
           const ourJobs = result.jobs.filter((job: UserJob) => jobIds.includes(job.job_id));
-          
+
           const statusMap: { [jobId: string]: JobStatus } = {};
-          
           const normalize = (s?: string) => {
             const v = (s || '').toLowerCase();
             if (v === 'done') return 'completed';
@@ -141,6 +140,25 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
             if (v === 'processing') return 'running';
             return (['pending','running','completed','failed','queued'].includes(v) ? v : 'pending') as any;
           };
+
+          // If /my-jobs returned nothing for our IDs, fallback to /job-status
+          if (ourJobs.length === 0) {
+            try {
+              const js = await apiService.getJobStatus(jobIds);
+              if (js.success && js.statuses.length) {
+                js.statuses.forEach(s => {
+                  statusMap[s.job_id] = {
+                    job_id: s.job_id,
+                    status: normalize(s.status) as any,
+                    result: s.result || ''
+                  };
+                });
+                setJobStatuses(prev => ({ ...prev, ...statusMap }));
+              }
+            } catch {}
+            return;
+          }
+
           ourJobs.forEach((job: UserJob) => {
             statusMap[job.job_id] = {
               job_id: job.job_id,
@@ -148,16 +166,16 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
               result: job.result || ''
             };
           });
-          
+
           setJobStatuses(statusMap);
-          
+
           // Check if all jobs are completed (only if we actually received our jobs)
           const allCompleted = ourJobs.length > 0 && ourJobs.every((job: UserJob) => {
             const st = (job.status || '').toLowerCase();
             return st === 'completed' || st === 'done' || st === 'failed';
           });
-          
-          // Update completedJobs state with jobs that are completed/done only (avoid duplicates with uploaded list)
+
+          // Update completedJobs state
           const completed = ourJobs.filter((job: UserJob) => {
             const st = (job.status || '').toLowerCase();
             return st === 'completed' || st === 'done';
@@ -166,18 +184,16 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
             console.log('[ChatBot] Setting completedJobs (completed only):', completed);
             setCompletedJobs(completed);
           }
-          
+
           if (allCompleted) {
-            // Add completion message
             const completionMessage: Message = {
               id: `completion-${Date.now()}`,
               text: `🎉 All video analyses are complete! You can now ask specific questions about the results.`,
               isBot: true,
               timestamp: new Date()
             };
-            
             setMessages(prev => [...prev, completionMessage]);
-            isActive = false; // Stop polling
+            isActive = false;
           }
         }
       } catch (error) {
