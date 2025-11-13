@@ -15,6 +15,7 @@ import traceback
 import time
 
 from botocore.exceptions import ClientError
+from boto3.dynamodb.conditions import Attr
 import pathlib
 
 # Import real Cognito authentication (SECURITY FIXED!)
@@ -864,36 +865,18 @@ async def call_bedrock_chatbot(message: str, user_id: str = None, session_id: st
         video_context = ""
         try:
             t = job_table()
-            
-            # 🔒 CRITICAL: Filter by user_id for multi-tenant isolation
+
+            # 🔒 CRITICAL: Filter by user_id (and optional session_id) using proper condition expressions
             if user_id:
-                # Use query with GSI if available, otherwise scan with filter
-                expr_names = {
-                    "#result": "result",
-                    "#status": "status",
-                    "#user_id": "user_id"
-                }
-                # Accept both historic "done" and newer "completed" statuses
-                expr_values = {
-                    ":status_done": "done",
-                    ":status_completed": "completed",
-                    ":uid": user_id
-                }
-                filter_expr = "attribute_exists(#result) AND (#status = :status_done OR #status = :status_completed) AND #user_id = :uid"
+                fe = Attr('result').exists() & (Attr('status').eq('done') | Attr('status').eq('completed')) & Attr('user_id').eq(user_id)
                 if session_id:
-                    expr_names["#session_id"] = "session_id"
-                    expr_values[":sid"] = session_id
-                    filter_expr += " AND #session_id = :sid"
-                resp = t.scan(
-                    FilterExpression=filter_expr,
-                    ExpressionAttributeNames=expr_names,
-                    ExpressionAttributeValues=expr_values,
-                    Limit=20  # Limit to user's recent jobs
-                )
-                logger.info(f"🔒 Filtered DynamoDB scan by user_id: {user_id} and session_id: {session_id}")
+                    fe = fe & Attr('session_id').eq(session_id)
+                resp = t.scan(FilterExpression=fe, Limit=20)
+                logger.info(f"🔒 DDB scan: user_id={user_id}, session_id={session_id}, items={len(resp.get('Items', []))}")
             else:
                 # Fallback without user filter (less secure)
-                resp = t.scan(Limit=100)
+                fe = Attr('result').exists() & (Attr('status').eq('done') | Attr('status').eq('completed'))
+                resp = t.scan(FilterExpression=fe, Limit=100)
                 logger.warning("⚠️ DynamoDB scan WITHOUT user_id filter - not recommended!")
             
             jobs = resp.get("Items", [])
@@ -967,6 +950,8 @@ async def call_bedrock_chatbot(message: str, user_id: str = None, session_id: st
                         video_name = video_info.get("filename", video_info.get("key", s3_key or "Unknown"))
                         labels = []
                         texts = []
+                        blackframes_count = 0
+                        blackframe_samples = []
                         
                         # Extract labels from our analysis structure
                         if "label_detection" in results and "unique_labels" in results["label_detection"]:
@@ -979,11 +964,28 @@ async def call_bedrock_chatbot(message: str, user_id: str = None, session_id: st
                             for text in results["text_detection"]["text_detections"][:10]:  # Top 10 texts
                                 if text.get("confidence", 0) > 50:
                                     texts.append(text["text"])
+
+                        # Extract blackframes summary
+                        if "blackframes" in results:
+                            bf = results["blackframes"] or {}
+                            frames = bf.get("black_frames") or []
+                            # Some workers provide an integer field; prefer actual count if present
+                            blackframes_count = bf.get("blackframes_detected") or (len(frames) if isinstance(frames, list) else 0)
+                            if isinstance(frames, list) and frames:
+                                for f in frames[:3]:
+                                    try:
+                                        ts = f.get("timestamp")
+                                        if ts is not None:
+                                            blackframe_samples.append(float(ts))
+                                    except Exception:
+                                        continue
                         
                         completed_jobs.append({
                             "name": video_name,
                             "labels": labels,
                             "texts": texts,
+                            "blackframes_count": int(blackframes_count or 0),
+                            "blackframe_samples": blackframe_samples,
                             "job_id": job_id
                         })
                         print(f"[DIAGNOSTIC] Added job {job_id}: {len(labels)} labels, {len(texts)} texts")
@@ -1000,6 +1002,13 @@ async def call_bedrock_chatbot(message: str, user_id: str = None, session_id: st
                         video_context += f"\n   Labels detected: {', '.join(video['labels'])}"
                     if video['texts']:
                         video_context += f"\n   Text detected: {', '.join(video['texts'])}"
+                    if video.get('blackframes_count', 0) > 0:
+                        samples = video.get('blackframe_samples') or []
+                        if samples:
+                            sample_str = ", ".join(f"{s:.1f}s" for s in samples[:3])
+                            video_context += f"\n   Blackframes: {video['blackframes_count']} (e.g., {sample_str})"
+                        else:
+                            video_context += f"\n   Blackframes: {video['blackframes_count']}"
                     video_context += f"\n   Job ID: {video['job_id']}"
                 
                 video_context += f"\n\nThe user can ask questions about these {len(completed_jobs)} analyzed videos."
@@ -1205,7 +1214,8 @@ async def ask_agent(
 ):
     try:
         # Direct AWS Bedrock ChatBot implementation with video context
-        user_id = current_user.get("user_id", "unknown")
+        # Use Cognito subject or username as stable user_id key
+        user_id = current_user.get('sub') or current_user.get('username', 'unknown')
         session_id = request.session_id  # Use session_id from frontend for multi-tenant search
         logger.info(f"Chat request from user {user_id} with session_id: {session_id}")
         response = await call_bedrock_chatbot(request.message, user_id, session_id=session_id)
@@ -1226,7 +1236,7 @@ async def ask_agent_get(
 ):
     try:
         # Direct AWS Bedrock ChatBot implementation with video context
-        user_id = current_user.get("user_id", "unknown")
+        user_id = current_user.get('sub') or current_user.get('username', 'unknown')
         response = await call_bedrock_chatbot(message, user_id, session_id=session_id)
         
         # Return response with explicit CORS headers
