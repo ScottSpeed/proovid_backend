@@ -21,8 +21,8 @@ const IntroAndLoginScreen: React.FC<IntroAndLoginScreenProps> = ({ onLoginSucces
 
   // Animation sequence: logo fade-in, then UI elements
   useEffect(() => {
-    const timer1 = setTimeout(() => setShowLogo(true), 800);  // Logo nach 0.8s
-    const timer2 = setTimeout(() => setShowUI(true), 2000);   // UI nach 2s
+    const timer1 = setTimeout(() => setShowLogo(true), 300);  // Logo nach 0.3s
+    const timer2 = setTimeout(() => setShowUI(true), 3000);   // UI nach 3s (nach Logo-Fade)
     
     return () => {
       clearTimeout(timer1);
@@ -53,6 +53,9 @@ const IntroAndLoginScreen: React.FC<IntroAndLoginScreenProps> = ({ onLoginSucces
 
   return (
     <div>
+      {/* Animiertes Karogitter im Hintergrund */}
+      {showUI && <div className="grid-background"></div>}
+      
       {/* LILA BALKEN LINKS - nur wenn UI sichtbar */}
       {showUI && <div className="purple-bar fade-in"></div>}
       
@@ -72,23 +75,6 @@ const IntroAndLoginScreen: React.FC<IntroAndLoginScreenProps> = ({ onLoginSucces
       {/* Navigation Menu */}
       <NavigationMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
 
-      {/* LILA BALKEN LINKS */}
-      <div className="fixed left-0 top-0 bottom-0 w-1 bg-purple-600 z-50"></div>
-      
-      {/* HAMBURGER MENÜ OBEN RECHTS */}
-      <div className="fixed top-4 right-4 z-50">
-        <button
-          onClick={() => setIsMenuOpen(true)}
-          className="p-2 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200"
-        >
-          <div className="w-6 h-6 flex flex-col justify-center space-y-1">
-            <div className="w-full h-0.5 bg-gray-800"></div>
-            <div className="w-full h-0.5 bg-gray-800"></div>
-            <div className="w-full h-0.5 bg-gray-800"></div>
-          </div>
-        </button>
-      </div>
-
       {/* Main Content */}
       <div className="main-container">
         <div className="content-center">
@@ -102,8 +88,6 @@ const IntroAndLoginScreen: React.FC<IntroAndLoginScreenProps> = ({ onLoginSucces
               />
             </div>
           )}
-          
-
 
           {/* Login Form - fade in with UI */}
           {showUI && (

@@ -201,7 +201,7 @@ phases:
         if [ "$BUILD_WORKER" = "1" ]; then
           echo "🔄 UPDATING WORKER SERVICE..."
           cp backend/infrastructure/ecs-taskdef-worker.json /tmp/taskdef-worker.json
-          jq --arg img "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:$IMAGE_TAG" '.containerDefinitions[0].image = $img' /tmp/taskdef-worker-2.json > /tmp/taskdef-worker-2.json
+          jq --arg img "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_WORKER:$IMAGE_TAG" '.containerDefinitions[0].image = $img' /tmp/taskdef-worker.json > /tmp/taskdef-worker-2.json
           aws ecs register-task-definition --cli-input-json file:///tmp/taskdef-worker-2.json
           aws ecs update-service --cluster $ECS_CLUSTER --service $ECS_SERVICE_WORKER --force-new-deployment
         else

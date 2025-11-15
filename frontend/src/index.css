@@ -60,20 +60,57 @@ body {
 
 /* Logo Container */
 .logo-container {
-  width: 240px;
-  height: 240px;
-  margin: 0 auto 48px auto;
+  max-width: 600px;
+  width: 100%;
+  margin: 0 auto 32px auto;
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  z-index: 1;
 }
 
 .real-logo {
   width: 100%;
-  height: 100%;
+  height: auto;
   object-fit: contain;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Animiertes Karogitter im Hintergrund */
+.grid-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 100%;
+  background-image: 
+    linear-gradient(to right, rgba(0, 0, 0, 0.25) 2px, transparent 2px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.25) 2px, transparent 2px);
+  background-size: 200px 200px;
+  z-index: 0;
+  pointer-events: none;
+  animation: gridFadeIn 1s ease-in 0.5s forwards, gridScroll 20s linear infinite;
+  opacity: 0;
+}
+
+@keyframes gridFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes gridScroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
 }
 
 /* Fade-in Animationen */
@@ -82,7 +119,7 @@ body {
 }
 
 .fade-in-slow {
-  animation: fadeInSlow 1.2s ease-out;
+  animation: fadeInSlow 2.5s ease-in-out;
 }
 
 @keyframes fadeIn {
@@ -99,11 +136,9 @@ body {
 @keyframes fadeInSlow {
   from {
     opacity: 0;
-    transform: scale(0.9);
   }
   to {
     opacity: 1;
-    transform: scale(1);
   }
 }
 
@@ -124,6 +159,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  position: relative;
+  z-index: 1;
 }
 
 .form-input {
@@ -472,7 +509,7 @@ body {
   position: fixed;
   bottom: 20px;
   right: 20px;
-  background: #ef4444;
+  background: #7c3aed;
   color: white;
   border: none;
   padding: 12px 20px;
@@ -484,23 +521,23 @@ body {
 }
 
 .logout-btn:hover {
-  background: #dc2626;
+  background: #6d28d9;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.3);
 }
 
 /* ========================================= */
 /* MOCKUP-SPECIFIC STYLES */
 /* ========================================= */
 
-/* Orange Bar (statt lila) */
-.orange-bar {
+/* Purple Bar - verwendet für FileUpload */
+.purple-bar-upload {
   position: fixed;
   left: 0;
   top: 0;
   bottom: 0;
   width: 8px;
-  background: linear-gradient(180deg, #ff5722 0%, #ff7043 100%);
+  background-color: #7c3aed;
   z-index: 50;
 }
 
@@ -559,17 +596,17 @@ body {
 }
 
 .upload-zone-mockup:hover {
-  border-color: #ff5722;
-  background: #fff3f0;
+  border-color: #7c3aed;
+  background: #f5f3ff;
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(255, 87, 34, 0.15);
+  box-shadow: 0 8px 20px rgba(124, 58, 237, 0.15);
 }
 
 .upload-zone-mockup.drag-over {
-  border-color: #ff5722;
-  background: #fff3f0;
+  border-color: #7c3aed;
+  background: #f5f3ff;
   transform: scale(1.02);
-  box-shadow: 0 12px 30px rgba(255, 87, 34, 0.2);
+  box-shadow: 0 12px 30px rgba(124, 58, 237, 0.2);
 }
 
 /* Cloud Icon Container */
@@ -582,7 +619,7 @@ body {
 }
 
 .cloud-svg {
-  filter: drop-shadow(0 4px 8px rgba(255, 87, 34, 0.2));
+  filter: drop-shadow(0 4px 8px rgba(124, 58, 237, 0.2));
 }
 
 /* Plus Icon */

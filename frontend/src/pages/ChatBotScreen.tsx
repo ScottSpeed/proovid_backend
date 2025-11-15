@@ -97,14 +97,37 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
     };
     
     setMessages([welcomeMessage]);
-    
-    if (!isFromUpload && completedJobs.length === 0 && jobIds.length === 0) {
-      // No jobs at all, redirect to upload after delay
-      setTimeout(() => {
-        navigate('/upload');
-      }, 3000);
+  }, [completedJobs.length, uploadedFiles.length, isFromUpload]);
+
+  // On mount, fetch user's completed jobs to populate sidebar when navigating directly
+  useEffect(() => {
+    let cancelled = false;
+    const normalize = (s?: string) => {
+      const v = (s || '').toLowerCase();
+      if (v === 'done') return 'completed';
+      if (v === 'error') return 'failed';
+      if (v === 'processing') return 'running';
+      return (['pending','running','completed','failed','queued'].includes(v) ? v : 'pending') as any;
+    };
+    const load = async () => {
+      try {
+        const resp = await apiService.getMyJobs(100);
+        if (cancelled) return;
+        const doneJobs = (resp.jobs || []).filter(j => {
+          const st = normalize(j.status);
+          return st === 'completed';
+        }) as UserJob[];
+        if (doneJobs.length && completedJobs.length === 0) {
+          setCompletedJobs(doneJobs);
+        }
+      } catch {}
+    };
+    // Only fetch if we didn't come from an upload and have no local jobs
+    if (!isFromUpload && completedJobs.length === 0) {
+      load();
     }
-  }, [completedJobs.length, uploadedFiles.length, isFromUpload, jobIds.length, navigate]);
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
@@ -244,8 +267,8 @@ const ChatBotScreen: React.FC<ChatBotScreenProps> = ({ onLogout: _ }) => {
     setIsTyping(true);
 
     try {
-      // Send message to API with session_id for context (persisted session preferred)
-      const session_id = initialSessionId || (jobIds.length > 0 ? jobIds[0] : undefined);
+      // Send message to API; use session_id only when tied to a current upload/session
+      const session_id = (isFromUpload || jobIds.length > 0) ? (initialSessionId || (jobIds.length > 0 ? jobIds[0] : undefined)) : undefined;
       const response = await apiService.chat({
         message: inputMessage,
         conversation_id: conversationId,

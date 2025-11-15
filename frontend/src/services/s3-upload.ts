@@ -1,4 +1,5 @@
 import { authService } from './amplify-auth';
+import { apiService } from './api-service';
 
 export interface UploadProgress {
   loaded: number;
@@ -16,17 +17,6 @@ export interface UploadResult {
 
 class S3UploadService {
   
-  private generateTimestampFolder(): string {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const seconds = String(now.getSeconds()).padStart(2, '0');
-    
-    return `analysis_${year}-${month}-${day}-${hours}-${minutes}-${seconds}`;
-  }
   
   private validateVideoFile(file: File): { valid: boolean; error?: string } {
     const validTypes = [
@@ -60,7 +50,8 @@ class S3UploadService {
   
   async uploadVideo(
     file: File,
-    _onProgress?: (progress: UploadProgress) => void
+    _onProgress?: (progress: UploadProgress) => void,
+    options?: { session_id?: string }
   ): Promise<UploadResult> {
     try {
       // Validate file
@@ -85,39 +76,22 @@ class S3UploadService {
         };
       }
       
-      // Generate upload path with timestamp folder
-      const folder = this.generateTimestampFolder();
-      const key = `${folder}/${file.name}`;
+      // Prepare upload params
       const bucket = 'christian-aws-development';
-      
-      console.log(`Starting real S3 upload to s3://${bucket}/${key}`);
-      
-      // Real S3 upload using presigned URL from backend
-      // Get upload credentials from backend
-      const token = await authService.getToken();
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
-      
-      // Request presigned URL from backend
-      const presignResponse = await fetch(`https://api.proovid.de/get-upload-url`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          bucket: bucket,
-          key: key,
-          content_type: file.type
-        })
+      // We send the filename as the key; backend will rewrite to session folder when session_id is provided
+      const requestedKey = `${file.name}`;
+      console.log(`Requesting presigned URL for s3://${bucket}/${requestedKey} (session: ${options?.session_id || 'none'})`);
+
+      // Request presigned URL from backend (session-aware)
+      const presign = await apiService.getUploadUrl({
+        bucket,
+        key: requestedKey,
+        content_type: file.type,
+        session_id: options?.session_id
       });
-      
-      if (!presignResponse.ok) {
-        throw new Error(`Failed to get upload URL: ${presignResponse.status}`);
-      }
-      
-      const { upload_url } = await presignResponse.json();
+      const upload_url = presign.upload_url;
+      const finalBucket = presign.bucket;
+      const finalKey = presign.key;
       
       // Upload file to S3 using presigned URL
       const uploadResponse = await fetch(upload_url, {
@@ -136,8 +110,8 @@ class S3UploadService {
       
       return {
         success: true,
-        bucket: bucket,
-        key: key
+        bucket: finalBucket,
+        key: finalKey
       };
       
     } catch (error) {

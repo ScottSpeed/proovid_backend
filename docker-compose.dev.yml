@@ -1,0 +1,82 @@
+# Docker Compose für lokale Entwicklung
+# Nutzt AWS Services (S3, DynamoDB, Rekognition, Bedrock) aber läuft lokal
+version: '3.8'
+
+services:
+  # FastAPI Backend (lokal, aber mit AWS-Zugriff)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      # AWS Credentials (aus lokaler AWS CLI)
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: eu-central-1
+      
+      # DynamoDB Table
+      JOB_TABLE: proov_jobs
+      
+      # SQS Queue
+      SQS_QUEUE_URL: https://sqs.eu-central-1.amazonaws.com/851725596604/proov-worker-queue
+      
+      # S3 Bucket
+      AWS_S3_BUCKET: christian-aws-development
+      
+      # Cognito (für Auth)
+      COGNITO_USER_POOL_ID: eu-central-1_ZpQH8Tpm4
+      COGNITO_CLIENT_ID: ${COGNITO_CLIENT_ID}
+      
+      # Development Mode
+      RELOAD: "true"
+      LOG_LEVEL: DEBUG
+      
+      # Frontend Origins (für CORS)
+      FRONTEND_ORIGINS: "http://localhost:5173,https://proovid.ai"
+    volumes:
+      # Live-Reload: Code-Änderungen sofort aktiv
+      - ./backend:/app
+      - /app/__pycache__  # Exclude pycache
+    command: uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - proovid-network
+
+  # Worker (lokal, aber mit AWS-Zugriff)
+  worker:
+    build:
+      context: ./backend
+      dockerfile: worker/Dockerfile
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: eu-central-1
+      JOB_TABLE: proov_jobs
+      SQS_QUEUE_URL: https://sqs.eu-central-1.amazonaws.com/851725596604/proov-worker-queue
+      DIRECT_MODE: "true"
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ./backend:/app
+      - /app/__pycache__
+    depends_on:
+      - backend
+    networks:
+      - proovid-network
+
+  # Optional: LocalStack für S3/DynamoDB Emulation (für Tests ohne AWS-Kosten)
+  # localstack:
+  #   image: localstack/localstack:latest
+  #   ports:
+  #     - "4566:4566"
+  #   environment:
+  #     SERVICES: s3,dynamodb,sqs
+  #     DEBUG: 1
+  #   volumes:
+  #     - ./localstack-data:/var/lib/localstack
+  #   networks:
+  #     - proovid-network
+
+networks:
+  proovid-network:
+    driver: bridge

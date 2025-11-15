@@ -140,8 +140,8 @@ const FileUploadScreen: React.FC<FileUploadScreenProps> = ({ onLogout }) => {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Linker oranger Balken */}
-      <div className="orange-bar"></div>
+      {/* Linker lila Balken */}
+      <div className="purple-bar"></div>
       
       {/* Hamburger Menü */}
       <button
@@ -183,7 +183,7 @@ const FileUploadScreen: React.FC<FileUploadScreenProps> = ({ onLogout }) => {
           >
             <div className="cloud-upload-icon">
               <svg width="80" height="60" viewBox="0 0 80 60" className="cloud-svg">
-                <path d="M60 40H20c-6.6 0-12-5.4-12-12s5.4-12 12-12c1.1-6.6 6.8-12 13.6-12 5.5 0 10.3 3.2 12.6 7.8C47.4 10.3 49.1 10 51 10c8.3 0 15 6.7 15 15 0 0.6-0.1 1.2-0.2 1.8C69.1 27.8 72 31.4 72 36c0 4.4-3.6 8-8 8h-4z" fill="#ff5722"/>
+                <path d="M60 40H20c-6.6 0-12-5.4-12-12s5.4-12 12-12c1.1-6.6 6.8-12 13.6-12 5.5 0 10.3 3.2 12.6 7.8C47.4 10.3 49.1 10 51 10c8.3 0 15 6.7 15 15 0 0.6-0.1 1.2-0.2 1.8C69.1 27.8 72 31.4 72 36c0 4.4-3.6 8-8 8h-4z" fill="#7c3aed"/>
               </svg>
               <div className="plus-icon">+</div>
             </div>

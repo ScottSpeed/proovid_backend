@@ -1,0 +1,594 @@
+﻿{
+    "services": [
+        {
+            "serviceArn": "arn:aws:ecs:eu-central-1:851725596604:service/my-cluster/backend-service",
+            "serviceName": "backend-service",
+            "clusterArn": "arn:aws:ecs:eu-central-1:851725596604:cluster/my-cluster",
+            "loadBalancers": [
+                {
+                    "targetGroupArn": "arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac",
+                    "containerName": "backend",
+                    "containerPort": 8000
+                }
+            ],
+            "serviceRegistries": [],
+            "status": "ACTIVE",
+            "desiredCount": 1,
+            "runningCount": 1,
+            "pendingCount": 0,
+            "launchType": "FARGATE",
+            "platformVersion": "LATEST",
+            "platformFamily": "Linux",
+            "taskDefinition": "arn:aws:ecs:eu-central-1:851725596604:task-definition/backend-task:183",
+            "deploymentConfiguration": {
+                "deploymentCircuitBreaker": {
+                    "enable": false,
+                    "rollback": false
+                },
+                "maximumPercent": 200,
+                "minimumHealthyPercent": 100,
+                "strategy": "ROLLING",
+                "bakeTimeInMinutes": 0
+            },
+            "deployments": [
+                {
+                    "id": "ecs-svc/3454994967154984462",
+                    "status": "PRIMARY",
+                    "taskDefinition": "arn:aws:ecs:eu-central-1:851725596604:task-definition/backend-task:183",
+                    "desiredCount": 1,
+                    "pendingCount": 0,
+                    "runningCount": 1,
+                    "failedTasks": 0,
+                    "createdAt": "2025-11-12T23:05:05.013000+01:00",
+                    "updatedAt": "2025-11-12T23:11:04.850000+01:00",
+                    "launchType": "FARGATE",
+                    "platformVersion": "1.4.0",
+                    "platformFamily": "Linux",
+                    "networkConfiguration": {
+                        "awsvpcConfiguration": {
+                            "subnets": [
+                                "subnet-0b67e5c38d5a52a3a",
+                                "subnet-08832bf2347a9a881"
+                            ],
+                            "securityGroups": [
+                                "sg-0834a64f2de46dc07"
+                            ],
+                            "assignPublicIp": "ENABLED"
+                        }
+                    },
+                    "rolloutState": "COMPLETED",
+                    "rolloutStateReason": "ECS deployment ecs-svc/3454994967154984462 completed."
+                }
+            ],
+            "roleArn": "arn:aws:iam::851725596604:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS",
+            "events": [
+                {
+                    "id": "f544d702-fc3f-4fdd-bcc4-c897b9a51e64",
+                    "createdAt": "2025-11-12T23:11:04.855000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "a9d59ecc-5684-42b8-85c2-a71f8071af3f",
+                    "createdAt": "2025-11-12T23:11:04.854000+01:00",
+                    "message": "(service backend-service) (deployment ecs-svc/3454994967154984462) deployment completed."
+                },
+                {
+                    "id": "08ab7e6b-fb48-4558-90f7-bbff4da21548",
+                    "createdAt": "2025-11-12T23:10:01.083000+01:00",
+                    "message": "(service backend-service, taskSet ecs-svc/2863836152130949574) has begun draining connections on 1 tasks."
+                },
+                {
+                    "id": "b339b44a-680e-4522-8388-28893d4ee3d8",
+                    "createdAt": "2025-11-12T23:10:01.077000+01:00",
+                    "message": "(service backend-service) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "7ffd23a3-1020-4047-a8ef-ee3aec7b6679",
+                    "createdAt": "2025-11-12T23:09:51.533000+01:00",
+                    "message": "(service backend-service) has stopped 1 running tasks: (task fa4f0e17f51041f1be011e959c2aed08)."
+                },
+                {
+                    "id": "f9395afe-b3ab-4ed0-8b41-0d1988e2ac90",
+                    "createdAt": "2025-11-12T23:08:38.864000+01:00",
+                    "message": "(service backend-service) registered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "b8f72ba7-75ad-49c5-b514-2f3ee9846bd8",
+                    "createdAt": "2025-11-12T23:05:19.576000+01:00",
+                    "message": "(service backend-service) has started 1 tasks: (task d099c20a9d794273a6f481707f1c131d)."
+                },
+                {
+                    "id": "6b2343c3-55db-48e7-868f-a3673c8860f7",
+                    "createdAt": "2025-11-12T22:32:03.540000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "95c3c236-b014-4d9a-8806-ee5499dad52c",
+                    "createdAt": "2025-11-12T22:32:03.539000+01:00",
+                    "message": "(service backend-service) (deployment ecs-svc/2863836152130949574) deployment completed."
+                },
+                {
+                    "id": "ad4c5e55-6859-4c7d-934c-704712166028",
+                    "createdAt": "2025-11-12T22:31:00.397000+01:00",
+                    "message": "(service backend-service, taskSet ecs-svc/8524817891482915680) has begun draining connections on 1 tasks."
+                },
+                {
+                    "id": "50fa573f-0b90-4f62-8806-0a019b93b0df",
+                    "createdAt": "2025-11-12T22:31:00.388000+01:00",
+                    "message": "(service backend-service) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "e7f3bf5d-af93-4419-9afe-1eb76b62e495",
+                    "createdAt": "2025-11-12T22:30:50.783000+01:00",
+                    "message": "(service backend-service) has stopped 1 running tasks: (task f1a4dae8d8354f8daa347f222fe15001)."
+                },
+                {
+                    "id": "d1e3d8f1-92f7-4219-bc72-f8acd16653e3",
+                    "createdAt": "2025-11-12T22:29:37.604000+01:00",
+                    "message": "(service backend-service) registered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "1a9fb588-7d82-4f2b-886f-17d3c24aa407",
+                    "createdAt": "2025-11-12T22:26:18.045000+01:00",
+                    "message": "(service backend-service) has started 1 tasks: (task fa4f0e17f51041f1be011e959c2aed08)."
+                },
+                {
+                    "id": "2fde4416-7105-4216-a4a2-5503799af091",
+                    "createdAt": "2025-11-12T21:58:17.301000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "2ab225a2-d951-4eb7-8d10-a00da57cf268",
+                    "createdAt": "2025-11-12T21:58:17.300000+01:00",
+                    "message": "(service backend-service) (deployment ecs-svc/8524817891482915680) deployment completed."
+                },
+                {
+                    "id": "ca7f4786-2c85-427b-8b38-cbd87bc0de1d",
+                    "createdAt": "2025-11-12T21:57:14.313000+01:00",
+                    "message": "(service backend-service, taskSet ecs-svc/0509459540899376040) has begun draining connections on 1 tasks."
+                },
+                {
+                    "id": "9bbc37f5-573a-4249-ae62-dd7275ffe49b",
+                    "createdAt": "2025-11-12T21:57:14.309000+01:00",
+                    "message": "(service backend-service) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "358376e4-f473-440b-bce6-fbb9e84117f3",
+                    "createdAt": "2025-11-12T21:57:03.888000+01:00",
+                    "message": "(service backend-service) has stopped 1 running tasks: (task 9f1264eab40048bfb2d96e384d99153c)."
+                },
+                {
+                    "id": "18a59181-4d68-45cc-aa9e-8fc5a8d8bd70",
+                    "createdAt": "2025-11-12T21:55:51.176000+01:00",
+                    "message": "(service backend-service) registered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "75b3b8d5-f6d6-4a5a-9348-593439f6ae28",
+                    "createdAt": "2025-11-12T21:52:31.452000+01:00",
+                    "message": "(service backend-service) has started 1 tasks: (task f1a4dae8d8354f8daa347f222fe15001)."
+                },
+                {
+                    "id": "7b962cbb-bc0b-4dd2-9849-c9b4cadd597d",
+                    "createdAt": "2025-11-12T21:34:08.082000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "24989fd7-1137-4d48-8d48-425e7dcfbc1c",
+                    "createdAt": "2025-11-12T21:34:08.081000+01:00",
+                    "message": "(service backend-service) (deployment ecs-svc/0509459540899376040) deployment completed."
+                },
+                {
+                    "id": "10e135a3-f0e8-4c68-b0b0-34c6603be82b",
+                    "createdAt": "2025-11-12T21:33:05.904000+01:00",
+                    "message": "(service backend-service, taskSet ecs-svc/6685194633754742857) has begun draining connections on 1 tasks."
+                },
+                {
+                    "id": "1d3d40b7-d24c-4549-afe2-96220222682f",
+                    "createdAt": "2025-11-12T21:33:05.900000+01:00",
+                    "message": "(service backend-service) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "88f8558c-1d0b-41b1-a876-104ab84329cd",
+                    "createdAt": "2025-11-12T21:32:54.262000+01:00",
+                    "message": "(service backend-service) has stopped 1 running tasks: (task 25a46a0560944e7aace28ee8e597e5e1)."
+                },
+                {
+                    "id": "e16e24c5-b905-4964-903f-fc023bbc0ae0",
+                    "createdAt": "2025-11-12T21:31:41.134000+01:00",
+                    "message": "(service backend-service) registered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "2290aaf7-f1fa-4bd1-8fb2-06763a96afe0",
+                    "createdAt": "2025-11-12T21:28:01.922000+01:00",
+                    "message": "(service backend-service) has started 1 tasks: (task 9f1264eab40048bfb2d96e384d99153c)."
+                },
+                {
+                    "id": "ebd544a9-e0ff-4888-a4a8-afafcfc958c1",
+                    "createdAt": "2025-11-12T21:07:11.376000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "02917f60-d8f9-4544-8e02-7682e30d7b50",
+                    "createdAt": "2025-11-12T21:07:11.375000+01:00",
+                    "message": "(service backend-service) (deployment ecs-svc/6685194633754742857) deployment completed."
+                },
+                {
+                    "id": "58884adc-edb1-4e98-819f-fb3cc8371bc6",
+                    "createdAt": "2025-11-12T21:06:17.402000+01:00",
+                    "message": "(service backend-service, taskSet ecs-svc/3445588007948762905) has begun draining connections on 1 tasks."
+                },
+                {
+                    "id": "cd10dec4-0c7e-4cae-8ab0-0029d954b9d3",
+                    "createdAt": "2025-11-12T21:06:17.397000+01:00",
+                    "message": "(service backend-service) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "4c167cb1-24d4-4519-b473-d5af60b2835a",
+                    "createdAt": "2025-11-12T21:06:06.726000+01:00",
+                    "message": "(service backend-service) has stopped 1 running tasks: (task 5a67280981d0457a8c0aded91ca51746)."
+                },
+                {
+                    "id": "28fd88fc-2be2-4cdf-8828-dbedd4931b05",
+                    "createdAt": "2025-11-12T21:04:54.025000+01:00",
+                    "message": "(service backend-service) registered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "ce44e92b-f3eb-490b-bf8d-d386c9d59759",
+                    "createdAt": "2025-11-12T21:01:14.262000+01:00",
+                    "message": "(service backend-service) has started 1 tasks: (task 25a46a0560944e7aace28ee8e597e5e1)."
+                },
+                {
+                    "id": "7b0756c1-d951-4996-ba41-0f72bd4a482c",
+                    "createdAt": "2025-11-12T20:55:38.335000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "43894ff1-a67b-4fcb-a37c-f69e237e0bd9",
+                    "createdAt": "2025-11-12T20:55:38.334000+01:00",
+                    "message": "(service backend-service) (deployment ecs-svc/3445588007948762905) deployment completed."
+                },
+                {
+                    "id": "ded8cd7c-a1cd-44aa-81f5-841c85149e65",
+                    "createdAt": "2025-11-12T20:54:44.767000+01:00",
+                    "message": "(service backend-service, taskSet ecs-svc/3539600325754505836) has begun draining connections on 1 tasks."
+                },
+                {
+                    "id": "6590b72b-2e0c-4ce4-9819-3e126da5462e",
+                    "createdAt": "2025-11-12T20:54:44.763000+01:00",
+                    "message": "(service backend-service) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "2144b8e2-4ef6-424c-92df-4e39476b5e52",
+                    "createdAt": "2025-11-12T20:54:35.032000+01:00",
+                    "message": "(service backend-service) has stopped 1 running tasks: (task 72a44df2e58a460a90a3020567e1a04d)."
+                },
+                {
+                    "id": "71621d76-e7f3-4f71-a7f3-074bc191070e",
+                    "createdAt": "2025-11-12T20:53:21.965000+01:00",
+                    "message": "(service backend-service) registered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "21a769f6-4479-4945-87ee-c5b95b0ec1a7",
+                    "createdAt": "2025-11-12T20:50:01.927000+01:00",
+                    "message": "(service backend-service) has started 1 tasks: (task 5a67280981d0457a8c0aded91ca51746)."
+                },
+                {
+                    "id": "f74b9c85-bc53-4f9d-a621-d0141c226c33",
+                    "createdAt": "2025-11-12T17:00:02.331000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "7d39006c-b97d-4240-bdae-40bc7e385d55",
+                    "createdAt": "2025-11-12T10:59:37.512000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "04d0817b-326b-4cfe-bf38-3f749921d8ce",
+                    "createdAt": "2025-11-12T04:59:20.691000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "c66b803e-a3f0-4912-a5ea-2a986c3419a8",
+                    "createdAt": "2025-11-11T22:59:20.213000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "78ffe930-0762-4e96-b634-f5d2fd6ebce9",
+                    "createdAt": "2025-11-11T22:59:20.212000+01:00",
+                    "message": "(service backend-service) (deployment ecs-svc/3539600325754505836) deployment completed."
+                },
+                {
+                    "id": "d9461e82-5d2e-473e-bb4e-ef3bf9019801",
+                    "createdAt": "2025-11-11T22:58:18.972000+01:00",
+                    "message": "(service backend-service, taskSet ecs-svc/8706386213954011840) has begun draining connections on 1 tasks."
+                },
+                {
+                    "id": "03a16d99-d94c-4de8-8d57-08c2df4893ec",
+                    "createdAt": "2025-11-11T22:58:18.967000+01:00",
+                    "message": "(service backend-service) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "453939a2-73eb-4ae6-b1f3-8314324e471a",
+                    "createdAt": "2025-11-11T22:58:07.691000+01:00",
+                    "message": "(service backend-service) has stopped 1 running tasks: (task 3cf17e9f8bfe406bb815b8ca09cd30c6)."
+                },
+                {
+                    "id": "db356255-0d6d-429c-a8eb-2c77766a9810",
+                    "createdAt": "2025-11-11T22:56:53.619000+01:00",
+                    "message": "(service backend-service) registered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "3839dace-cf69-4406-9e18-e816f61cf63c",
+                    "createdAt": "2025-11-11T22:53:25.520000+01:00",
+                    "message": "(service backend-service) has started 1 tasks: (task 72a44df2e58a460a90a3020567e1a04d)."
+                },
+                {
+                    "id": "9871da7d-adc6-4906-84c1-a1354a5d0553",
+                    "createdAt": "2025-11-11T18:53:31.067000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "1e4192b9-58a4-4c84-af1f-a191469efd9b",
+                    "createdAt": "2025-11-11T12:53:29.266000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "8291d4ec-2f87-4837-b1c0-6046813e32f2",
+                    "createdAt": "2025-11-11T06:53:19.426000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "bc28da80-ef60-46ad-b53d-0beb1c5cc4b4",
+                    "createdAt": "2025-11-11T00:52:51.918000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "331eefbd-0a65-4419-83b4-4d9c94a3d939",
+                    "createdAt": "2025-11-11T00:52:51.917000+01:00",
+                    "message": "(service backend-service) (deployment ecs-svc/8706386213954011840) deployment completed."
+                },
+                {
+                    "id": "027754f0-248f-4eec-9cf0-91e3ec3f05a5",
+                    "createdAt": "2025-11-11T00:51:48.983000+01:00",
+                    "message": "(service backend-service, taskSet ecs-svc/1806216684095921090) has begun draining connections on 1 tasks."
+                },
+                {
+                    "id": "29fc0abc-bb28-43c0-93b7-e9919854bfc9",
+                    "createdAt": "2025-11-11T00:51:48.979000+01:00",
+                    "message": "(service backend-service) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "a8ae3475-72da-4778-ae2d-2f7c909b8cd1",
+                    "createdAt": "2025-11-11T00:51:38.684000+01:00",
+                    "message": "(service backend-service) has stopped 1 running tasks: (task 40b994e84a2f49e28834950780ab7050)."
+                },
+                {
+                    "id": "1c49da46-9cdb-455a-930f-6e5faeca013d",
+                    "createdAt": "2025-11-11T00:50:25.753000+01:00",
+                    "message": "(service backend-service) registered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "bc354ad4-7e64-487c-af7b-06d8b7d372aa",
+                    "createdAt": "2025-11-11T00:46:03.780000+01:00",
+                    "message": "(service backend-service) has started 1 tasks: (task 3cf17e9f8bfe406bb815b8ca09cd30c6)."
+                },
+                {
+                    "id": "d111019a-a2f1-45a1-9955-1e9c609fd083",
+                    "createdAt": "2025-11-11T00:41:49.807000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "13da0d29-5311-4cf7-bcc6-ee48bcce81df",
+                    "createdAt": "2025-11-11T00:41:49.806000+01:00",
+                    "message": "(service backend-service) (deployment ecs-svc/1806216684095921090) deployment completed."
+                },
+                {
+                    "id": "bd024b77-0983-48c5-b1a5-601a99d26b20",
+                    "createdAt": "2025-11-11T00:40:46.582000+01:00",
+                    "message": "(service backend-service, taskSet ecs-svc/4787868834111484884) has begun draining connections on 1 tasks."
+                },
+                {
+                    "id": "b28c4d0a-c845-48fe-b874-28b289d86c34",
+                    "createdAt": "2025-11-11T00:40:46.577000+01:00",
+                    "message": "(service backend-service) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "623960a4-c84d-43f8-9810-8cbd6f5f3956",
+                    "createdAt": "2025-11-11T00:40:36.190000+01:00",
+                    "message": "(service backend-service) has stopped 1 running tasks: (task 3aa80d4adbe041d587c3375fec945a6e)."
+                },
+                {
+                    "id": "8230ff39-f70e-4511-8002-6deb2f5b7bb2",
+                    "createdAt": "2025-11-11T00:39:23.120000+01:00",
+                    "message": "(service backend-service) registered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "1b8029ec-ba33-4384-8ec4-8449f7b55bd0",
+                    "createdAt": "2025-11-11T00:35:43.085000+01:00",
+                    "message": "(service backend-service) has started 1 tasks: (task 40b994e84a2f49e28834950780ab7050)."
+                },
+                {
+                    "id": "a6bda2ea-e329-43d1-9d7b-f4c146cb9cb3",
+                    "createdAt": "2025-11-11T00:20:38.771000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "b3b51a31-1250-42ac-b80c-b898be7d985b",
+                    "createdAt": "2025-11-11T00:20:38.770000+01:00",
+                    "message": "(service backend-service) (deployment ecs-svc/4787868834111484884) deployment completed."
+                },
+                {
+                    "id": "db669f89-d777-4794-a663-4c2d108c1158",
+                    "createdAt": "2025-11-11T00:19:35.129000+01:00",
+                    "message": "(service backend-service, taskSet ecs-svc/2315048552371459009) has begun draining connections on 1 tasks."
+                },
+                {
+                    "id": "4bbcd93e-6cd6-41a3-b3d0-8f28669c1165",
+                    "createdAt": "2025-11-11T00:19:35.103000+01:00",
+                    "message": "(service backend-service) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "00ff0dd0-fd34-4538-aa38-fbc55418da45",
+                    "createdAt": "2025-11-11T00:19:25.162000+01:00",
+                    "message": "(service backend-service) has stopped 1 running tasks: (task 67436dec072f450db778553e61e20f63)."
+                },
+                {
+                    "id": "206b5407-c754-44fa-bd6f-7d0b76955351",
+                    "createdAt": "2025-11-11T00:18:12.342000+01:00",
+                    "message": "(service backend-service) registered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "799f5b4b-913f-41a2-be1c-49c7ecbf1fc9",
+                    "createdAt": "2025-11-11T00:14:42.829000+01:00",
+                    "message": "(service backend-service) has started 1 tasks: (task 3aa80d4adbe041d587c3375fec945a6e)."
+                },
+                {
+                    "id": "a9dcfe93-193d-44c2-bd2b-abaf36337e1c",
+                    "createdAt": "2025-11-10T23:38:16.213000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "783596e3-d664-4973-8f0e-97e8cc217083",
+                    "createdAt": "2025-11-10T23:38:16.212000+01:00",
+                    "message": "(service backend-service) (deployment ecs-svc/2315048552371459009) deployment completed."
+                },
+                {
+                    "id": "d8f03dbd-7e16-4e88-aa27-4d9265458d02",
+                    "createdAt": "2025-11-10T23:37:12.488000+01:00",
+                    "message": "(service backend-service, taskSet ecs-svc/6685252148890715185) has begun draining connections on 1 tasks."
+                },
+                {
+                    "id": "7bd594ac-d1a9-493e-8aa7-5fc66e770eab",
+                    "createdAt": "2025-11-10T23:37:12.483000+01:00",
+                    "message": "(service backend-service) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "f7fd8f33-7ef9-4b25-a16b-9b9a49a33104",
+                    "createdAt": "2025-11-10T23:37:02.050000+01:00",
+                    "message": "(service backend-service) has stopped 1 running tasks: (task 41aa8b1b0ea5470ea9fd91b6b383641e)."
+                },
+                {
+                    "id": "28c60c98-aac2-4c09-a8a4-98c0a53982a1",
+                    "createdAt": "2025-11-10T23:35:49.028000+01:00",
+                    "message": "(service backend-service) registered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "159db7c0-335a-4e87-82a6-aae3db2c8155",
+                    "createdAt": "2025-11-10T23:31:38.143000+01:00",
+                    "message": "(service backend-service) has started 1 tasks: (task 67436dec072f450db778553e61e20f63)."
+                },
+                {
+                    "id": "e0be91fc-48e7-43fe-a0ff-5470d45a215f",
+                    "createdAt": "2025-11-10T23:30:54.673000+01:00",
+                    "message": "(service backend-service) stopped 1 pending tasks."
+                },
+                {
+                    "id": "cb5c16ea-e07d-43c3-bd78-33ce5b7dc0df",
+                    "createdAt": "2025-11-10T23:30:35.696000+01:00",
+                    "message": "(service backend-service) has started 1 tasks: (task 3a9463d32c3044b3a88134d41a132cb0)."
+                },
+                {
+                    "id": "56f963b1-89f7-4d80-9834-7747c643411d",
+                    "createdAt": "2025-11-10T22:52:56.102000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "aba28913-fe60-4dd4-8046-cbb42c1f0745",
+                    "createdAt": "2025-11-10T22:52:56.101000+01:00",
+                    "message": "(service backend-service) (deployment ecs-svc/6685252148890715185) deployment completed."
+                },
+                {
+                    "id": "03bc9cb9-f727-4113-844d-da0f9dd95206",
+                    "createdAt": "2025-11-10T22:51:52.593000+01:00",
+                    "message": "(service backend-service, taskSet ecs-svc/9132359824491124031) has begun draining connections on 1 tasks."
+                },
+                {
+                    "id": "9aeb882f-a0f7-4e7c-bf56-4b003c73a636",
+                    "createdAt": "2025-11-10T22:51:52.588000+01:00",
+                    "message": "(service backend-service) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "117fc9bb-0c9b-488f-ba30-8265286aaa4c",
+                    "createdAt": "2025-11-10T22:51:42.623000+01:00",
+                    "message": "(service backend-service) has stopped 1 running tasks: (task 712a318337f64305b7a5b1ea3c7de571)."
+                },
+                {
+                    "id": "b3b7bd0c-48f2-4fdd-a6c7-58d8a913e044",
+                    "createdAt": "2025-11-10T22:50:29.363000+01:00",
+                    "message": "(service backend-service) registered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "af90728b-c839-4a15-bc53-19a86587cbb0",
+                    "createdAt": "2025-11-10T22:45:56.851000+01:00",
+                    "message": "(service backend-service) has started 1 tasks: (task 41aa8b1b0ea5470ea9fd91b6b383641e)."
+                },
+                {
+                    "id": "99d025cb-c881-4a2f-8ee6-dfc05b6f144b",
+                    "createdAt": "2025-11-10T22:20:31.698000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                },
+                {
+                    "id": "5f7784c0-1769-4e1f-9239-f6ee73a334e9",
+                    "createdAt": "2025-11-10T22:20:31.697000+01:00",
+                    "message": "(service backend-service) (deployment ecs-svc/9132359824491124031) deployment completed."
+                },
+                {
+                    "id": "487f3d18-f97b-42de-8978-33f48bd73724",
+                    "createdAt": "2025-11-10T22:19:28.553000+01:00",
+                    "message": "(service backend-service, taskSet ecs-svc/5538341024668311982) has begun draining connections on 1 tasks."
+                },
+                {
+                    "id": "3128635c-f135-4424-8581-5bff2da5a9dd",
+                    "createdAt": "2025-11-10T22:19:28.548000+01:00",
+                    "message": "(service backend-service) deregistered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "8993dd0e-e2bd-46eb-a1c0-af0d63bc1f50",
+                    "createdAt": "2025-11-10T22:19:18.234000+01:00",
+                    "message": "(service backend-service) has stopped 1 running tasks: (task 02c27d7ceea644908d70608425a7d1e7)."
+                },
+                {
+                    "id": "4f1d9728-dc77-4ad0-b783-1694964e5e17",
+                    "createdAt": "2025-11-10T22:18:06.235000+01:00",
+                    "message": "(service backend-service) registered 1 targets in (target-group arn:aws:elasticloadbalancing:eu-central-1:851725596604:targetgroup/backend-tg/3f77a554740d11ac)"
+                },
+                {
+                    "id": "64ff1c78-b932-4c78-ac24-1bc79ac8df8c",
+                    "createdAt": "2025-11-10T22:14:04.924000+01:00",
+                    "message": "(service backend-service) has started 1 tasks: (task 712a318337f64305b7a5b1ea3c7de571)."
+                },
+                {
+                    "id": "4c991be6-6dc9-4e0c-85d8-83cf47b2f366",
+                    "createdAt": "2025-11-10T21:53:24.405000+01:00",
+                    "message": "(service backend-service) has reached a steady state."
+                }
+            ],
+            "createdAt": "2025-09-08T22:22:35.886000+02:00",
+            "placementConstraints": [],
+            "placementStrategy": [],
+            "networkConfiguration": {
+                "awsvpcConfiguration": {
+                    "subnets": [
+                        "subnet-0b67e5c38d5a52a3a",
+                        "subnet-08832bf2347a9a881"
+                    ],
+                    "securityGroups": [
+                        "sg-0834a64f2de46dc07"
+                    ],
+                    "assignPublicIp": "ENABLED"
+                }
+            },
+            "healthCheckGracePeriodSeconds": 0,
+            "schedulingStrategy": "REPLICA",
+            "deploymentController": {
+                "type": "ECS"
+            },
+            "createdBy": "arn:aws:iam::851725596604:user/admin",
+            "enableECSManagedTags": false,
+            "propagateTags": "NONE",
+            "enableExecuteCommand": false,
+            "availabilityZoneRebalancing": "ENABLED"
+        }
+    ],
+    "failures": []
+}

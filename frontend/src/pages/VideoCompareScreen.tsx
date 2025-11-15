@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import NavigationMenu from '../components/NavigationMenu';
-import proovidLogo from '../assets/proovid-03.jpg';
 import { apiService, type UserJob } from '../services/api-service';
 import './VideoCompareScreen.css';
 
@@ -188,8 +187,15 @@ const VideoCompareScreen: React.FC<VideoCompareScreenProps> = ({ onLogout: _ }) 
 
   const handleLoadedMetadata = () => {
     const vid1 = video1Ref.current;
-    if (vid1) {
+    const vid2 = video2Ref.current;
+    if (vid1 && vid2) {
+      // Use the longer duration to ensure full timeline coverage
+      const maxDuration = Math.max(vid1.duration, vid2.duration);
+      setDuration(maxDuration);
+    } else if (vid1) {
       setDuration(vid1.duration);
+    } else if (vid2) {
+      setDuration(vid2.duration);
     }
   };
 
@@ -218,11 +224,6 @@ const VideoCompareScreen: React.FC<VideoCompareScreenProps> = ({ onLogout: _ }) 
       {/* Header Bar (wie im ChatBot) */}
       <div className="chatbot-header">
         <div className="header-content">
-          <img 
-            src={proovidLogo} 
-            alt="Proovid Logo" 
-            className="header-logo"
-          />
           <h1 className="header-title">🎬 Video Comparison</h1>
         </div>
         
@@ -347,6 +348,7 @@ const VideoCompareScreen: React.FC<VideoCompareScreenProps> = ({ onLogout: _ }) 
                 className="overlay-video video-bottom"
                 onTimeUpdate={handleTimeUpdate}
                 onLoadedMetadata={handleLoadedMetadata}
+                onEnded={() => setIsPlaying(false)}
                 playsInline
               />
 
@@ -359,6 +361,7 @@ const VideoCompareScreen: React.FC<VideoCompareScreenProps> = ({ onLogout: _ }) 
                   ref={video2Ref}
                   src={selectedVideo2.url}
                   className="overlay-video video-top"
+                  onLoadedMetadata={handleLoadedMetadata}
                   playsInline
                 />
               </div>
@@ -429,7 +432,8 @@ const VideoCompareScreen: React.FC<VideoCompareScreenProps> = ({ onLogout: _ }) 
               type="range"
               min="0"
               max={duration || 0}
-              value={currentTime}
+              value={Math.min(currentTime, duration)}
+              step="0.01"
               onChange={(e) => handleSeek(parseFloat(e.target.value))}
               className="timeline-slider-mockup"
               disabled={!selectedVideo1 || !selectedVideo2}
